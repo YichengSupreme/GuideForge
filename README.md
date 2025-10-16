@@ -33,9 +33,9 @@ flowchart TD
     style M fill:#c8e6c9,stroke:#2e7d32,stroke-width:1px
 ```
 
-## 🧬 Three Scripts for Different Tasks
+## 🧬 Modular Scripts that can be ran as a pipeline or as individual tasks
 
-### 1. **`get_ucsc_sequences.py`** - Fetch Sequences Only
+#### 1. **`get_ucsc_sequences.py`** - Fetch Sequences Only
 **When to use:** You want to get DNA sequences from UCSC but analyze them elsewhere
 
 ```bash
@@ -48,22 +48,25 @@ python get_ucsc_sequences.py chr17:7668402-7668421:+
 # Custom distances
 python get_ucsc_sequences.py targets.txt --up 200 --down 200
 
-# Different genome
-python get_ucsc_sequences.py targets.txt --genome hg19
+# Different genome (default = hg38)
+python get_ucsc_sequences.py targets.txt --genome hg19 
 
 # Scan for PAM sites
 python get_ucsc_sequences.py chr17:7668402-7668421:+ --scan-pam
 ```
 
 **Input:** Genomic coordinates only (e.g., `chr17:7668402-7668421:+`)
-**Output:** `Upstream_sequences.txt` and `Downstream_sequences.txt`
-**Optional:** `CRISPR_candidates.txt` (if `--scan-pam` is used)
+**Output:** 
+- `Upstream_sequences.txt` - Upstream DNA sequences (FASTA format)
+- `Downstream_sequences.txt` - Downstream DNA sequences (FASTA format)
+- `CRISPR_candidates.txt` - PAM sites in FASTA format (if `--scan-pam` used)
+- `CRISPR_candidates_qc.csv` - QC results for PAM sites (if `--qc` used)
 
 **PAM Scanning:** Use `--scan-pam` to automatically find SpCas9 PAM sites (NGG) in the sequences and output CRISPR candidates in CSV format.
 
 ---
 
-### 2. **`idt_batch_crispr.py`** - Analyze Existing Sequences
+#### 2. **`idt_batch_crispr.py`** - Analyze Existing Sequences
 **When to use:** You already have FASTA files and want IDT analysis
 
 **Uses:** https://eu.idtdna.com/site/order/designtool/index/CRISPR_SEQUENCE
@@ -78,11 +81,13 @@ python idt_batch_crispr.py upstream.txt downstream.txt exon.txt
 
 **Input:** FASTA-style .txt files
 **Output:** `{filename}_idt.csv` with ranked results
+- Contains columns: `sequence_name`, `dna_sequence`, `on_target_score`, `off_target_score`, `on_plus_off`
+- Sorted by `on_plus_off` (highest scores first)
 
 ---
 
-### 3. **`run_CRISPR_target_automation.py`** - Complete Pipeline
-**When to use:** You want the full workflow from gene names to ranked results
+#### 3. **`run_CRISPR_target_automation.py`** - Complete Pipeline
+**When to use:** You want the full workflow from chromosome coordinates to ranked results
 
 ```bash
 # Complete pipeline
@@ -94,6 +99,9 @@ python run_CRISPR_target_automation.py targets.txt --up 200 --down 200 --batch-s
 
 **Input:** Genomic coordinates only
 **Output:** Complete analysis with ranked results
+- `Upstream_sequences_idt.csv` - Ranked upstream CRISPR sites
+- `Downstream_sequences_idt.csv` - Ranked downstream CRISPR sites
+- `CRISPR_candidates_idt.csv` - Ranked PAM sites (if --scan-pam used)
 
 ---
 
@@ -101,12 +109,12 @@ python run_CRISPR_target_automation.py targets.txt --up 200 --down 200 --batch-s
 
 | Your Situation | Use This Script | Why |
 |----------------|-----------------|-----|
-| I have coordinates, want full analysis | `run_CRISPR_target_automation.py` | Complete pipeline |
-| I have coordinates, want sequences only | `get_ucsc_sequences.py` | Just fetch sequences |
-| I have coordinates, want PAM sites | `get_ucsc_sequences.py --scan-pam` | Find CRISPR targets |
-| I have FASTA files, want IDT analysis | `idt_batch_crispr.py` | Analyze existing sequences |
+| I have coordinates, want full analysis | `run_CRISPR_target_automation.py targets.txt --scan-pam --qc` | Complete pipeline with PAM + QC |
+| I have coordinates, want sequences + PAM + QC | `get_ucsc_sequences.py targets.txt --scan-pam --qc` | Find and filter CRISPR targets |
+| I have coordinates, want sequences + PAM only | `get_ucsc_sequences.py targets.txt --scan-pam` | Find CRISPR targets (no filtering) |
+| I have coordinates, want up/downstream sequences only | `get_ucsc_sequences.py targets.txt` | Just fetch sequences |
+| I have FASTA files, want IDT analysis | `idt_batch_crispr.py file1.txt [file2.txt]` | Analyze existing sequences |
 | I want to test IDT connection | `idt_batch_crispr.py` | Quick connectivity test |
-| I want to resume failed analysis | `idt_batch_crispr.py` | Continue from where it left off |
 
 ---
 
@@ -140,12 +148,18 @@ VERBOSE=1  # Set to 0 for minimal output
 
 ## 📊 Output Files
 
-- `Upstream_sequences.txt` - Upstream DNA sequences
-- `Downstream_sequences.txt` - Downstream DNA sequences  
-- `Upstream_sequences_idt.csv` - Ranked upstream results
-- `Downstream_sequences_idt.csv` - Ranked downstream results
+#### **Basic Sequence Files:**
+- `Upstream_sequences.txt` - Upstream DNA sequences (FASTA format)
+- `Downstream_sequences.txt` - Downstream DNA sequences (FASTA format)
 
-**CSV columns:**
+#### **PAM Analysis Files:**
+- `CRISPR_candidates.txt` - PAM sites in FASTA format (if --scan-pam used)
+- `CRISPR_candidates_qc.csv` - QC results for PAM sites (if --qc used)
+
+#### **IDT Analysis Files:**
+- `CRISPR_candidates_idt.csv` - Ranked PAM sites (if --scan-pam used)
+
+**CRISPR_candidates_idt columns:**
 - `sequence_name` - Original identifier
 - `dna_sequence` - The actual DNA sequence
 - `on_target_score` - IDT on-target analysis
@@ -157,13 +171,13 @@ VERBOSE=1  # Set to 0 for minimal output
 ## 🚀 Quick Start
 
 1. **Set up your cookie** in `config.sh`
-2. **Create a targets file** with gene coordinates:
+2. **Create a targets.txt file** with gene coordinates:
    ```
    chr17:7668402-7668421:+
    ```
 3. **Run the pipeline:**
    ```bash
-   python run_CRISPR_target_automation.py targets.txt
+   python run_CRISPR_target_automation.py targets.txt --scan-pam --qc 
    ```
 4. **Open the results** in Excel and sort by `on_plus_off` column
 
@@ -171,7 +185,7 @@ VERBOSE=1  # Set to 0 for minimal output
 
 ## 📋 Input Format
 
-The targets file supports coordinate format only:
+The targets.txt file supports coordinates format only:
 
 **Coordinates:**
 ```
@@ -190,7 +204,7 @@ chr17:7668402-7668421:+
 
 The IDT CRISPR API requires a temporary browser session cookie to authenticate your requests. Follow these simple steps to get yours:
 
-### 🚀 Quick Method (Recommended)
+#### Instructions
 
 1. **Open IDT CRISPR Designer**
    - Go to: https://eu.idtdna.com/site/order/designtool/index/CRISPR_SEQUENCE
@@ -223,7 +237,7 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
    IDT_SESSION_COOKIE="ASP.NET_SessionId=your_session_id; Anon=your_anon_id; ..."
    ```
 
-### ⚠️ Important Notes
+#### ⚠️ Important Notes
 
 - **Cookies expire every few hours** — if the script stops returning scores, just refresh your cookie
 - **Keep your cookie private** — don't share it publicly
@@ -232,7 +246,7 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
   ASP.NET_SessionId=dzzwdv3adomtkqept1zgp0hc; Anon=t6ocoWScxF8=; ARRAffinity=874c5298ae0e2eca12812a980102a414521df46497427d5bbed67654bd42654b
   ```
 
-### 🔧 Troubleshooting
+#### 🔧 Troubleshooting
 
 **❌ Getting "Authentication failed" errors?**
 - Your cookie has expired → Get a fresh one using the steps above
@@ -265,8 +279,8 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 
 1. Copy the entire `CRISPR_target_automation` folder
 2. Update the IDT session cookie in `config.sh`
-3. Create your targets file
-4. Run: `python run_CRISPR_target_automation.py targets.txt`
+3. Create your targets.txt file
+4. Run: `run_CRISPR_target_automation.py targets.txt --scan-pam --qc`
 
 ## Future Notes
 - In future versions, grepping IDT cookie could be automated by fetching an anonymous session cookie via requests.get(), but for stability and reproducibility, the current version uses a user-supplied cookie.
