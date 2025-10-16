@@ -8,7 +8,8 @@ IDT CRISPR batch analyzer (v2)
 - Saves results to <filename>_idt.csv
 
 Usage:
-    python idt_batch_crispr.py file1.txt [file2.txt ...]
+    python idt_batch_crispr.py                    # Run connectivity test only
+    python idt_batch_crispr.py file1.txt [file2.txt ...]  # Analyze sequences
 """
 
 import os, time, random, requests, pandas as pd, sys, re, logging
@@ -439,9 +440,19 @@ def main():
     logger.info(f"Command line arguments: {sys.argv}")
     
     if len(sys.argv) < 2:
-        error_msg = "Usage: python idt_batch_crispr.py file1.txt [file2.txt]"
-        logger.error(error_msg)
-        print(error_msg)
+        logger.info("No input files provided, running connectivity test only...")
+        print("🔎 No input files provided, running connectivity test only...")
+        print("📝 Log file:", log_file)
+        
+        # Run connectivity test
+        if tiny_test(logger):
+            logger.info("Connectivity test passed successfully")
+            print("✅ Connectivity test passed! Your IDT session is working.")
+            print("💡 To analyze sequences, run: python idt_batch_crispr.py file1.txt [file2.txt]")
+        else:
+            logger.error("Connectivity test failed")
+            print("❌ Connectivity test failed. Check your session cookie in config.sh")
+            print(f"📝 Check log file for details: {log_file}")
         return
     
     input_files = [f for f in sys.argv[1:] if Path(f).suffix == ".txt" and Path(f).exists()]

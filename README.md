@@ -193,7 +193,7 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 ### 🚀 Quick Method (Recommended)
 
 1. **Open IDT CRISPR Designer**
-   - Go to: https://eu.idtdna.com/pages/tools/crispr-designer
+   - Go to: https://eu.idtdna.com/site/order/designtool/index/CRISPR_SEQUENCE
 
 2. **Open Developer Tools**
    - **Mac**: `Cmd + Option + I`
@@ -209,6 +209,9 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 5. **Find IDT Request**
    - Look for any request to `eu.idtdna.com`
    - Click on it to inspect
+
+   ![IDT Cookie Location](Cookie.png)
+   *The Cookie header is highlighted in red - this is what you need to copy!*
 
 6. **Copy Cookie Value**
    - In the right panel: **Headers** → **Request Headers**
@@ -266,4 +269,4 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 4. Run: `python run_CRISPR_target_automation.py targets.txt`
 
 ## Future Notes
-- In future versions, grepping IDT cookie could be automated by fetching an anonymous session cookie via requests.get(), but for stability and reproducibility, the current version uses a user-supplied cookie
+- In future versions, grepping IDT cookie could be automated by fetching an anonymous session cookie via requests.get(), but for stability and reproducibility, the current version uses a user-supplied cookie.
