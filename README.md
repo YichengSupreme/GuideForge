@@ -6,24 +6,24 @@ A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT CR
 
 ```mermaid
 flowchart TD
-    A[Input: Genomic Coordinates<br/>chr17:7668402-7668521:+] --> B[get_ucsc_sequences.py]
+    A["Input: Genomic Coordinates<br/>chr17:7668402-7668521:+"] --> B["get_ucsc_sequences.py"]
 
     B --> C{Options}
-    C -->|Basic| D[Fetch Upstream/Downstream<br/>Sequences from UCSC]
-    C -->|--scan-pam| E[Scan for SpCas9 PAM sites<br/>(NGG patterns)]
-    C -->|--qc| F[Apply Quality Control<br/>(GC content, homopolymers, etc.)]
+    C -->|Basic| D["Fetch Upstream/Downstream<br/>Sequences from UCSC"]
+    C -->|--scan-pam| E["Scan for SpCas9 PAM sites<br/>NGG patterns"]
+    C -->|--qc| F["Apply Quality Control<br/>GC content, homopolymers, etc."]
 
-    D --> G[Upstream_sequences.txt<br/>Downstream_sequences.txt]
-    E --> H[CRISPR_candidates.txt<br/>FASTA format]
-    F --> I[CRISPR_candidates_qc.csv<br/>QC results]
+    D --> G["Upstream_sequences.txt<br/>Downstream_sequences.txt"]
+    E --> H["CRISPR_candidates.txt<br/>FASTA format"]
+    F --> I["CRISPR_candidates_qc.csv<br/>QC results"]
 
-    G --> J[IDT Analysis]
+    G --> J["IDT Analysis"]
     H --> J
     I --> J
 
-    J --> K[idt_batch_crispr.py<br/>Batch API calls]
-    K --> L[CRISPR_candidates_idt.csv<br/>Ranked results with on/off-target scores]
-    L --> M[Final Results<br/>Best CRISPR sites]
+    J --> K["idt_batch_crispr.py<br/>Batch API calls"]
+    K --> L["CRISPR_candidates_idt.csv<br/>Ranked results with on/off-target scores"]
+    L --> M["Final Results<br/>Best CRISPR sites"]
 
     style A fill:#e1f5fe,stroke:#0277bd,stroke-width:1px
     style B fill:#fff3e0,stroke:#ffb300,stroke-width:1px
