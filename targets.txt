@@ -1,0 +1,2 @@
+# replace with your own chr coordinates
+chr17:7668402-7668521:+

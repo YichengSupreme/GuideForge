@@ -66,7 +66,7 @@ python get_ucsc_sequences.py chr17:7668402-7668421:+ --scan-pam
 ### 2. **`idt_batch_crispr.py`** - Analyze Existing Sequences
 **When to use:** You already have FASTA files and want IDT analysis
 
-** Uses: https://eu.idtdna.com/site/order/designtool/index/CRISPR_SEQUENCE**
+**Uses:** https://eu.idtdna.com/site/order/designtool/index/CRISPR_SEQUENCE
 
 ```bash
 # Analyze one file
@@ -157,10 +157,8 @@ VERBOSE=1  # Set to 0 for minimal output
 ## 🚀 Quick Start
 
 1. **Set up your cookie** in `config.sh`
-2. **Create a targets file** with gene names:
+2. **Create a targets file** with gene coordinates:
    ```
-   TP53
-   BRCA1
    chr17:7668402-7668421:+
    ```
 3. **Run the pipeline:**
@@ -184,15 +182,69 @@ chr17:7668402-7668421:+
 
 **Format:** `chr:start-end:strand`
 
-**Note:** Gene names are no longer supported. Use coordinates instead.
+**Note:** Gene names are not supported to avoid ambiguity. Use coordinates instead.
 
 ---
+
+## 🔑 How to Get Your IDT Session Cookie
+
+The IDT CRISPR API requires a temporary browser session cookie to authenticate your requests. Follow these simple steps to get yours:
+
+### 🚀 Quick Method (Recommended)
+
+1. **Open IDT CRISPR Designer**
+   - Go to: https://eu.idtdna.com/pages/tools/crispr-designer
+
+2. **Open Developer Tools**
+   - **Mac**: `Cmd + Option + I`
+   - **Windows/Linux**: `Ctrl + Shift + I`
+
+3. **Navigate to Network Tab**
+   - Click on the "Network" tab in developer tools
+
+4. **Reload the Page**
+   - Press `F5` or `Cmd+R` to refresh
+   - This populates the Network panel with requests
+
+5. **Find IDT Request**
+   - Look for any request to `eu.idtdna.com`
+   - Click on it to inspect
+
+6. **Copy Cookie Value**
+   - In the right panel: **Headers** → **Request Headers**
+   - Find the line starting with `Cookie:`
+   - Copy the entire cookie string
+
+7. **Update config.sh**
+   ```bash
+   IDT_SESSION_COOKIE="ASP.NET_SessionId=your_session_id; Anon=your_anon_id; ..."
+   ```
+
+### ⚠️ Important Notes
+
+- **Cookies expire every few hours** — if the script stops returning scores, just refresh your cookie
+- **Keep your cookie private** — don't share it publicly
+- **Example cookie format**:
+  ```
+  ASP.NET_SessionId=dzzwdv3adomtkqept1zgp0hc; Anon=t6ocoWScxF8=; ARRAffinity=874c5298ae0e2eca12812a980102a414521df46497427d5bbed67654bd42654b
+  ```
+
+### 🔧 Troubleshooting
+
+**❌ Getting "Authentication failed" errors?**
+- Your cookie has expired → Get a fresh one using the steps above
+
+**❌ Can't find the Cookie header?**
+- Make sure you're looking in **Request Headers** (not Response Headers)!
+- Scroll down once inside Headers (You should see General, Response Headers, Request Headers)
+- Try reloading the page and looking for requests to `eu.idtdna.com`
 
 ## 🔧 Requirements
 
 - Python 3.6+
 - Required Python packages: `requests`, `pandas`
 - Valid IDT session cookie (update in `config.sh`)
+- see requirements.txt
 
 ---
 
