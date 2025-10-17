@@ -35,25 +35,24 @@ flowchart TD
 
 ## 🧬 Modular Scripts that can be ran as a pipeline or as individual tasks
 
-#### 1. **`get_ucsc_sequences.py`** - Fetch Sequences Only
+#### 1. **`utils/get_ucsc_sequences.py`** - Fetch Sequences Only
 **When to use:** You want to get DNA sequences from UCSC but analyze them elsewhere
 
 ```bash
 # Basic usage 
-python get_ucsc_sequences.py targets.txt
+python utils/get_ucsc_sequences.py targets.txt
 
 # Single coordinate
-python get_ucsc_sequences.py chr17:7668402-7668421:+
-
-# Custom distances
-python get_ucsc_sequences.py targets.txt --up 200 --down 200
-
-# Different genome (default = hg38)
-python get_ucsc_sequences.py targets.txt --genome hg19 
+python utils/get_ucsc_sequences.py chr17:7668402-7668421:+
 
 # Scan for PAM sites
-python get_ucsc_sequences.py chr17:7668402-7668421:+ --scan-pam
+python utils/get_ucsc_sequences.py chr17:7668402-7668421:+ --scan-pam
+
+# With quality control
+python utils/get_ucsc_sequences.py targets.txt --scan-pam --qc
 ```
+
+**Note:** All parameters (distances, genome, QC settings) are controlled by `config.yaml` and `policy.yaml` for reproducibility.
 
 **Input:** Genomic coordinates only (e.g., `chr17:7668402-7668421:+`)
 **Output:** 
@@ -66,17 +65,20 @@ python get_ucsc_sequences.py chr17:7668402-7668421:+ --scan-pam
 
 ---
 
-#### 2. **`idt_batch_crispr.py`** - Analyze Existing Sequences
+#### 2. **`utils/idt_batch_crispr.py`** - Analyze Existing Sequences
 **When to use:** You already have FASTA files and want IDT analysis
 
 **Uses:** https://eu.idtdna.com/site/order/designtool/index/CRISPR_SEQUENCE
 
 ```bash
+# Test IDT connection
+python utils/idt_batch_crispr.py
+
 # Analyze one file
-python idt_batch_crispr.py sequences.txt
+python utils/idt_batch_crispr.py sequences.txt
 
 # Analyze multiple files
-python idt_batch_crispr.py upstream.txt downstream.txt exon.txt
+python utils/idt_batch_crispr.py upstream.txt downstream.txt exon.txt
 ```
 
 **Input:** FASTA-style .txt files
@@ -86,15 +88,23 @@ python idt_batch_crispr.py upstream.txt downstream.txt exon.txt
 
 ---
 
-#### 3. **`run_CRISPR_target_automation.py`** - Complete Pipeline
+#### 3. **`run_pipeline.py`** - Complete Pipeline (Recommended)
 **When to use:** You want the full workflow from chromosome coordinates to ranked results
 
 ```bash
 # Complete pipeline
-python run_CRISPR_target_automation.py targets.txt
+python run_pipeline.py targets.txt --scan-pam --qc
 
-# Custom settings
-python run_CRISPR_target_automation.py targets.txt --up 200 --down 200 --batch-size 5
+# With guide selection
+python run_pipeline.py targets.txt --scan-pam --qc --select-guides
+```
+
+#### 4. **`utils/run_CRISPR_target_automation.py`** - Advanced Pipeline
+**When to use:** You need more control over the pipeline execution
+
+```bash
+# Complete pipeline
+python utils/run_CRISPR_target_automation.py targets.txt --scan-pam --qc
 ```
 
 **Input:** Genomic coordinates only
@@ -109,40 +119,90 @@ python run_CRISPR_target_automation.py targets.txt --up 200 --down 200 --batch-s
 
 | Your Situation | Use This Script | Why |
 |----------------|-----------------|-----|
-| I have coordinates, want full analysis | `run_CRISPR_target_automation.py targets.txt --scan-pam --qc` | Complete pipeline with PAM + QC |
-| I have coordinates, want sequences + PAM + QC | `get_ucsc_sequences.py targets.txt --scan-pam --qc` | Find and filter CRISPR targets |
-| I have coordinates, want sequences + PAM only | `get_ucsc_sequences.py targets.txt --scan-pam` | Find CRISPR targets (no filtering) |
-| I have coordinates, want up/downstream sequences only | `get_ucsc_sequences.py targets.txt` | Just fetch sequences |
-| I have FASTA files, want IDT analysis | `idt_batch_crispr.py file1.txt [file2.txt]` | Analyze existing sequences |
-| I want to test IDT connection | `idt_batch_crispr.py` | Quick connectivity test |
+| I have coordinates, want full analysis | `python run_pipeline.py targets.txt --scan-pam --qc` | Complete pipeline with PAM + QC |
+| I have coordinates, want sequences + PAM + QC | `python utils/get_ucsc_sequences.py targets.txt --scan-pam --qc` | Find and filter CRISPR targets |
+| I have coordinates, want sequences + PAM only | `python utils/get_ucsc_sequences.py targets.txt --scan-pam` | Find CRISPR targets (no filtering) |
+| I have coordinates, want up/downstream sequences only | `python utils/get_ucsc_sequences.py targets.txt` | Just fetch sequences |
+| I have FASTA files, want IDT analysis | `python utils/idt_batch_crispr.py file1.txt [file2.txt]` | Analyze existing sequences |
+| I want to test IDT connection | `python utils/idt_batch_crispr.py` | Quick connectivity test |
+| I want to select top guides from IDT results | `python utils/select_top_guides.py results_idt.csv` | Filter and rank guides |
+
+---
+
+## 🛠️ Additional Utility Scripts
+
+#### **`utils/select_top_guides.py`** - Guide Selection
+**When to use:** You have IDT results and want to select the best guides based on policy criteria
+
+```bash
+# Select top guides from IDT results
+python utils/select_top_guides.py CRISPR_candidates_idt.csv
+
+# Select from multiple IDT result files
+python utils/select_top_guides.py file1_idt.csv file2_idt.csv
+```
+
+#### **`utils/qc_ucsc_seq.py`** - Quality Control
+**When to use:** You have PAM candidates and want to apply QC filters
+
+```bash
+# Apply QC to PAM candidates
+python utils/qc_ucsc_seq.py CRISPR_candidates.txt --output qc_results.csv
+```
+
+#### **`utils/manifest.py`** - Run Tracking
+**When to use:** You want to create a manifest for reproducibility tracking
+
+```bash
+# Create a basic manifest
+python utils/manifest.py --config config.yaml --policy policy.yaml
+
+# Create manifest with custom stats
+python utils/manifest.py --config config.yaml --policy policy.yaml --stats '{"n_guides": 1000, "passed_qc": 850}'
+```
 
 ---
 
 ## ⚙️ Configuration
 
-Edit `config.sh` to customize:
+Edit `config.yaml` to customize:
 
-```bash
-# Sequence distances
-UPSTREAM_DISTANCE=100
-DOWNSTREAM_DISTANCE=100
+```yaml
+# UCSC Sequence Fetching Settings
+ucsc:
+  upstream_distance: 100
+  downstream_distance: 100
+  genome_assembly: "hg38"
+  retries: 3
 
-# Genome assembly
-GENOME_ASSEMBLY="hg38"
+# IDT Analysis Settings
+idt:
+  batch_size: 10
+  timeout: 60
+  session_cookie: "ASP.NET_SessionId=YOUR_SESSION_ID_HERE; ..."
+  upstream_results: "Upstream_sequences_idt.csv"
+  downstream_results: "Downstream_sequences_idt.csv"
 
-# IDT settings
-IDT_BATCH_SIZE=10
-IDT_TIMEOUT=60
-IDT_SESSION_COOKIE="ASP.NET_SessionId=YOUR_SESSION_ID_HERE; ..."
+# Quality Control Settings
+qc:
+  gc_min: 0.35
+  gc_max: 0.65
+  max_poly_t: 4
+  max_homopolymer: 5
+  restriction_sites:
+    - "GAATTC"  # EcoRI
+    - "AAGCTT"  # HindIII
+    - "GGATCC"  # BamHI
+    - "GGTACC"  # KpnI
+    - "GCGGCCGC"  # NotI
 
-# Retry settings
-UCSC_RETRIES=3
-
-# Output verbosity
-VERBOSE=1  # Set to 0 for minimal output
+# System Settings
+system:
+  python_cmd: "python3"
+  verbose: 1
 ```
 
-**Important**: You must update the `IDT_SESSION_COOKIE` in `config.sh` with your valid IDT session cookie.
+**Important**: You must update the `session_cookie` in `config.yaml` with your valid IDT session cookie.
 
 ---
 
@@ -170,14 +230,14 @@ VERBOSE=1  # Set to 0 for minimal output
 
 ## 🚀 Quick Start
 
-1. **Set up your cookie** in `config.sh`
+1. **Set up your cookie** in `config.yaml`
 2. **Create a targets.txt file** with gene coordinates:
    ```
    chr17:7668402-7668421:+
    ```
 3. **Run the pipeline:**
    ```bash
-   python run_CRISPR_target_automation.py targets.txt --scan-pam --qc 
+   python run_pipeline.py targets.txt --scan-pam --qc 
    ```
 4. **Open the results** in Excel and sort by `on_plus_off` column
 
@@ -224,7 +284,7 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
    - Look for any request to `eu.idtdna.com`
    - Click on it to inspect
 
-   ![IDT Cookie Location](Cookie.png)
+   ![IDT Cookie Location](assets/Cookie.png)
    *The Cookie header is highlighted in red - this is what you need to copy!*
 
 6. **Copy Cookie Value**
@@ -232,9 +292,10 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
    - Find the line starting with `Cookie:`
    - Copy the entire cookie string
 
-7. **Update config.sh**
-   ```bash
-   IDT_SESSION_COOKIE="ASP.NET_SessionId=your_session_id; Anon=your_anon_id; ..."
+7. **Update config.yaml**
+   ```yaml
+   idt:
+     session_cookie: "ASP.NET_SessionId=your_session_id; Anon=your_anon_id; ..."
    ```
 
 #### ⚠️ Important Notes
@@ -259,28 +320,28 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 ## 🔧 Requirements
 
 - Python 3.6+
-- Required Python packages: `requests`, `pandas`
-- Valid IDT session cookie (update in `config.sh`)
+- Required Python packages: `requests`, `pandas`, `PyYAML`
+- Valid IDT session cookie (update in `config.yaml`)
 - see requirements.txt
 
 ---
 
 ## 🛠️ Troubleshooting
 
-**Session expired**: Update the `IDT_SESSION_COOKIE` in `config.sh`
+**Session expired**: Update the `session_cookie` in `config.yaml`
 
-**Network timeouts**: Increase `IDT_TIMEOUT` in `config.sh`
+**Network timeouts**: Increase `timeout` in the `idt` section of `config.yaml`
 
-**Verbose output**: Set `VERBOSE=1` in `config.sh`
+**Verbose output**: Set `verbose: 1` in the `system` section of `config.yaml`
 
 ---
 
 ## 🧪 Lab Usage
 
 1. Copy the entire `CRISPR_target_automation` folder
-2. Update the IDT session cookie in `config.sh`
+2. Update the IDT session cookie in `config.yaml`
 3. Create your targets.txt file
-4. Run: `run_CRISPR_target_automation.py targets.txt --scan-pam --qc`
+4. Run: `python run_pipeline.py targets.txt --scan-pam --qc`
 
 ## Future Notes
 - In future versions, grepping IDT cookie could be automated by fetching an anonymous session cookie via requests.get(), but for stability and reproducibility, the current version uses a user-supplied cookie.

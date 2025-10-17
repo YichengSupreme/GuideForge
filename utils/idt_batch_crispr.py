@@ -12,28 +12,48 @@ Usage:
     python idt_batch_crispr.py file1.txt [file2.txt ...]  # Analyze sequences
 """
 
-import os, time, random, requests, pandas as pd, sys, re, logging
+import os, time, random, requests, pandas as pd, sys, re, logging, yaml
 from pathlib import Path
 from datetime import datetime
 
 # === 1. Load configuration ===
 def load_config():
-    config_file = Path(__file__).parent / "config.sh"
+    config_file = Path(__file__).parent.parent / "config.yaml"
     if not config_file.exists():
-        print("Error: config.sh not found.")
+        print("Error: config.yaml not found.")
         sys.exit(1)
-    config = {}
+    
     with open(config_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                value = value.strip('"\'')
-                config[key.strip()] = value
-    return config
+        config = yaml.safe_load(f)
+    
+    # Load policy file if specified
+    policy_file = config.get('policy_file', './policy.yaml')
+    policy_path = Path(__file__).parent.parent / policy_file
+    
+    if policy_path.exists():
+        with open(policy_path, 'r') as f:
+            policy = yaml.safe_load(f)
+        
+        # Merge policy into config
+        config['policy'] = policy
+    
+    # Flatten the nested structure for backward compatibility
+    def flatten_dict(d, prefix=''):
+        flattened = {}
+        for key, value in d.items():
+            new_key = f'{prefix}_{key.upper()}' if prefix else key.upper()
+            if isinstance(value, dict):
+                flattened.update(flatten_dict(value, new_key))
+            else:
+                flattened[new_key] = value
+        return flattened
+    
+    flattened = flatten_dict(config)
+    
+    return flattened
 
 CONFIG = load_config()
-COOKIE_STRING = CONFIG.get("IDT_SESSION_COOKIE", "")
+COOKIE_STRING = CONFIG.get("IDT_SESSION_COOKIE", "").strip()
 ENDPOINT_SEARCH = "https://eu.idtdna.com/sciservices/sherlock/crispr/search/"
 ENDPOINT_RESULT = "https://eu.idtdna.com/sciservices/sherlock/crispr/getresult/"
 HEADERS = {
@@ -42,11 +62,23 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; IDT-CRISPR-BatchBot/2.0)",
     "Cookie": COOKIE_STRING
 }
-BATCH_SIZE = int(CONFIG.get("IDT_BATCH_SIZE", "10"))
-DELAY_MIN, DELAY_MAX = 3, 8
-TIMEOUT = int(CONFIG.get("IDT_TIMEOUT", "60"))
-POLL_INTERVAL = 3
-POLL_MAX = 10  # how many times to recheck results
+# Validate required IDT config keys
+required_idt_keys = ['IDT_BATCH_SIZE', 'IDT_TIMEOUT', 'IDT_DELAY_MIN', 'IDT_DELAY_MAX', 'IDT_POLL_INTERVAL', 'IDT_POLL_MAX', 'IDT_RETRY_ATTEMPTS']
+missing_keys = [key for key in required_idt_keys if key not in CONFIG]
+if missing_keys:
+    print(f"❌ Error: Missing required IDT configuration keys in config.yaml:")
+    for key in missing_keys:
+        print(f"   - {key}")
+    print(f"\n💡 Please add these keys to your config.yaml file.")
+    sys.exit(1)
+
+BATCH_SIZE = int(CONFIG.get("IDT_BATCH_SIZE"))
+DELAY_MIN = int(CONFIG.get("IDT_DELAY_MIN"))
+DELAY_MAX = int(CONFIG.get("IDT_DELAY_MAX"))
+TIMEOUT = int(CONFIG.get("IDT_TIMEOUT"))
+POLL_INTERVAL = int(CONFIG.get("IDT_POLL_INTERVAL"))
+POLL_MAX = int(CONFIG.get("IDT_POLL_MAX"))
+RETRY_ATTEMPTS = int(CONFIG.get("IDT_RETRY_ATTEMPTS"))
 
 # === 1.5. Setup logging ===
 def setup_logging():
@@ -348,19 +380,19 @@ def process_file(txt_path, logger):
         
         # Retry logic for timeouts
         r = None
-        for attempt in range(3):
+        for attempt in range(RETRY_ATTEMPTS):
             try:
-                logger.debug(f"Batch {batch_num} attempt {attempt + 1}/3")
+                logger.debug(f"Batch {batch_num} attempt {attempt + 1}/{RETRY_ATTEMPTS}")
                 r = requests.post(ENDPOINT_SEARCH, headers=HEADERS, json=payload, timeout=TIMEOUT)
                 break
             except requests.exceptions.ReadTimeout:
-                if attempt < 2:
+                if attempt < RETRY_ATTEMPTS - 1:
                     logger.warning(f"Timeout on batch {batch_num} attempt {attempt + 1}, retrying...")
                     print(f"    ⏰ Timeout on attempt {attempt + 1}, retrying...")
                     time.sleep(5)
                 else:
-                    logger.error(f"Batch {batch_num} failed after 3 timeout attempts")
-                    print(f"    ❌ Batch {batch_num} failed after 3 attempts")
+                    logger.error(f"Batch {batch_num} failed after {RETRY_ATTEMPTS} timeout attempts")
+                    print(f"    ❌ Batch {batch_num} failed after {RETRY_ATTEMPTS} attempts")
                     break
             except Exception as e:
                 logger.error(f"Error on batch {batch_num} attempt {attempt + 1}: {str(e)}")
@@ -451,7 +483,7 @@ def main():
             print("💡 To analyze sequences, run: python idt_batch_crispr.py file1.txt [file2.txt]")
         else:
             logger.error("Connectivity test failed")
-            print("❌ Connectivity test failed. Check your session cookie in config.sh")
+            print("❌ Connectivity test failed. Check your session cookie in config.yaml")
             print(f"📝 Check log file for details: {log_file}")
         return
     
@@ -469,7 +501,7 @@ def main():
     # Run connectivity test
     if not tiny_test(logger):
         logger.error("Connectivity test failed. Exiting.")
-        print("❌ Connectivity test failed. Check your session cookie in config.sh")
+        print("❌ Connectivity test failed. Check your session cookie in config.yaml")
         print(f"📝 Check log file for details: {log_file}")
         return
     
@@ -490,6 +522,10 @@ def main():
     logger.info(f"Processing complete: {successful_files}/{len(input_files)} files successful")
     print(f"\n🎉 Processing complete: {successful_files}/{len(input_files)} files successful")
     print(f"📝 Detailed log saved to: {log_file}")
+    
+    # Encourage manifest creation
+    print("\n📋 Run completed! Consider creating a manifest for reproducibility:")
+    print(f"   python manifest.py --config config.yaml --policy policy.yaml --stats '{{\"files_processed\": {len(input_files)}, \"successful_files\": {successful_files}, \"success_rate\": {successful_files/len(input_files):.3f}}}'")
 
 if __name__ == "__main__":
     main()

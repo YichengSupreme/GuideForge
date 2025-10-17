@@ -3,3 +3,6 @@ requests>=2.25.0
 
 # Data manipulation and analysis
 pandas>=1.3.0
+
+# YAML configuration parsing
+PyYAML>=6.0

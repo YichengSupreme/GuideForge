@@ -7,7 +7,7 @@ from the UCSC Genome Browser API. Optionally scan for SpCas9 PAM sites
 and apply quality control filters.
 
 Usage:
-    python get_ucsc_sequences.py targets.txt --up 100 --down 100 --genome hg38
+    python get_ucsc_sequences.py targets.txt
     python get_ucsc_sequences.py chr14:103928378-103928397:+ --scan-pam
     python get_ucsc_sequences.py chr17:7668402-7668421:+ --scan-pam --qc
 
@@ -24,34 +24,57 @@ Outputs:
     CRISPR_candidates_qc.csv (if --scan-pam --qc is used, QC results)
 """
 
-import argparse, requests, time, re, sys
+import argparse, requests, time, re, sys, yaml
 from pathlib import Path
 from pam_scanner import scan_spcas9_sites, write_crispr_candidates
 from qc_ucsc_seq import basic_qc, qc_pam_sites
 
 def load_config():
-    """Load configuration from config.sh file."""
-    config_file = Path(__file__).parent / "config.sh"
+    """Load configuration from config.yaml and policy.yaml files."""
+    config_file = Path(__file__).parent.parent / "config.yaml"
     if not config_file.exists():
         return {}
     
-    config = {}
     with open(config_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                value = value.strip('"\'')
-                config[key.strip()] = value
-    return config
+        config = yaml.safe_load(f)
+    
+    # Load policy file if specified
+    policy_file = config.get('policy_file', './policy.yaml')
+    policy_path = Path(__file__).parent.parent / policy_file
+    
+    if policy_path.exists():
+        with open(policy_path, 'r') as f:
+            policy = yaml.safe_load(f)
+        
+        # Merge policy into config
+        config['policy'] = policy
+    
+    # Flatten the nested structure for backward compatibility
+    def flatten_dict(d, prefix=''):
+        flattened = {}
+        for key, value in d.items():
+            new_key = f'{prefix}_{key.upper()}' if prefix else key.upper()
+            if isinstance(value, dict):
+                flattened.update(flatten_dict(value, new_key))
+            else:
+                flattened[new_key] = value
+        return flattened
+    
+    flattened = flatten_dict(config)
+    
+    return flattened
 
 CONFIG = load_config()
 
 UCSC_BASE = "https://api.genome.ucsc.edu"
 
 
-def fetch_sequence(chrom, start, end, strand="+", genome="hg38", max_retries=3):
+def fetch_sequence(chrom, start, end, strand="+", genome=None, max_retries=None):
     """Fetch DNA sequence for a region from UCSC with retry logic."""
+    # Always use config values (parameters will be None from our pipeline)
+    genome = CONFIG.get("UCSC_GENOME_ASSEMBLY")
+    max_retries = int(CONFIG.get("UCSC_RETRIES", 3))
+    
     url = f"{UCSC_BASE}/getData/sequence"
     params = {"genome": genome, "chrom": chrom, "start": start, "end": end}
     
@@ -83,8 +106,13 @@ def parse_target(line):
     return None
 
 
-def get_flanking_sequences(chrom, start, end, up=100, down=100, strand="+", genome="hg38"):
+def get_flanking_sequences(chrom, start, end, up=None, down=None, strand="+", genome=None):
     """Fetch upstream and downstream sequences."""
+    # Always use config values (parameters will be None from our pipeline)
+    up = int(CONFIG.get("UCSC_UPSTREAM_DISTANCE"))
+    down = int(CONFIG.get("UCSC_DOWNSTREAM_DISTANCE"))
+    genome = CONFIG.get("UCSC_GENOME_ASSEMBLY")
+    
     upstream_start = max(0, start - up)
     downstream_end = end + down
     up_seq = fetch_sequence(chrom, upstream_start, start, strand, genome)
@@ -119,36 +147,17 @@ def write_pam_fasta(candidates, filename, qc_results=None):
 def main():
     ap = argparse.ArgumentParser(description="Fetch upstream/downstream sequences for genomic coordinates from UCSC.")
     ap.add_argument("input", nargs='?', help="Input file with coordinates, or a single coordinate.")
-    ap.add_argument("--up", type=int, default=int(CONFIG.get("UPSTREAM_DISTANCE", "100")), 
-                   help="Number of bp upstream to fetch.")
-    ap.add_argument("--down", type=int, default=int(CONFIG.get("DOWNSTREAM_DISTANCE", "100")), 
-                   help="Number of bp downstream to fetch.")
-    ap.add_argument("--genome", default=CONFIG.get("GENOME_ASSEMBLY", "hg38"), 
-                   help="Genome assembly (default: hg38).")
-    ap.add_argument("--upstream-out", default=CONFIG.get("UPSTREAM_OUTPUT", "Upstream_sequences.txt"), 
-                   help="Output filename for upstream sequences.")
-    ap.add_argument("--downstream-out", default=CONFIG.get("DOWNSTREAM_OUTPUT", "Downstream_sequences.txt"), 
-                   help="Output filename for downstream sequences.")
+    # Upstream/downstream distances are controlled by config.yaml only for reproducibility
+    # Genome assembly is controlled by config.yaml only for reproducibility
+    # Output file names are now configured in config.yaml (no CLI overrides for manifest integrity)
     ap.add_argument("--retries", type=int, default=int(CONFIG.get("UCSC_RETRIES", "3")), 
                    help="Number of retry attempts for failed requests.")
     ap.add_argument("--scan-pam", action="store_true", 
                    help="Scan sequences for SpCas9 PAM sites and output CRISPR candidates.")
-    ap.add_argument("--candidates-out", default="CRISPR_candidates.txt",
-                   help="Output filename for CRISPR candidates (default: CRISPR_candidates.txt)")
     
-    # QC options
+    # QC options (parameters controlled by policy.yaml for reproducibility)
     ap.add_argument("--qc", action="store_true",
                    help="Apply quality control filters to CRISPR candidates.")
-    ap.add_argument("--gc-min", type=float, default=0.35, 
-                   help="Minimum GC content for QC (default: 0.35)")
-    ap.add_argument("--gc-max", type=float, default=0.80, 
-                   help="Maximum GC content for QC (default: 0.80)")
-    ap.add_argument("--max-poly-t", type=int, default=4, 
-                   help="Maximum consecutive T's for QC (default: 4)")
-    ap.add_argument("--max-homopolymer", type=int, default=5, 
-                   help="Maximum homopolymer length for QC (default: 5)")
-    ap.add_argument("--qc-output", default="CRISPR_candidates_qc.csv",
-                   help="Output filename for QC results (default: CRISPR_candidates_qc.csv)")
     args = ap.parse_args()
 
     # Handle input - either file or single coordinate
@@ -159,28 +168,32 @@ def main():
         print("  python get_ucsc_sequences.py targets.txt")
         print("  python get_ucsc_sequences.py chr17:7668402-7668421:+")
         print("  python get_ucsc_sequences.py chr14:103928378-103928397:-")
+        print("  python get_ucsc_sequences.py targets.txt --scan-pam --qc")
+        print("")
+        print("Note: Upstream/downstream distances and genome assembly are controlled by config.yaml")
         return
     
     # Check if input is a file or a single coordinate
     if Path(args.input).exists():
-        # It's a file
+        # It's a file - use config output names
         targets = Path(args.input).read_text().strip().splitlines()
-        # Use default output names for file input
-        upstream_out = args.upstream_out
-        downstream_out = args.downstream_out
+        upstream_out = CONFIG.get("OUTPUTS_UPSTREAM_SEQUENCES")
+        downstream_out = CONFIG.get("OUTPUTS_DOWNSTREAM_SEQUENCES")
     else:
-        # It's a single coordinate
+        # It's a single coordinate - use config output names
         targets = [args.input]
-        # Create descriptive filenames for single input
-        safe_name = args.input.replace(":", "_").replace("-", "_").replace("+", "plus").replace("-", "minus")
-        upstream_out = f"{safe_name}_upstream.txt"
-        downstream_out = f"{safe_name}_downstream.txt"
+        upstream_out = CONFIG.get("OUTPUTS_UPSTREAM_SEQUENCES")
+        downstream_out = CONFIG.get("OUTPUTS_DOWNSTREAM_SEQUENCES")
     upstream_records, downstream_records = [], []
     crispr_candidates = []
     qc_candidates = []
 
     for i, line in enumerate(targets, 1):
         if not line.strip():
+            continue
+        
+        # Skip comment lines (starting with #)
+        if line.strip().startswith('#'):
             continue
 
         parsed = parse_target(line)
@@ -193,7 +206,21 @@ def main():
             continue
 
         print(f"🔎 Fetching {label} ...")
-        up_seq, down_seq = get_flanking_sequences(chrom, start, end, args.up, args.down, strand, args.genome)
+        
+        # Validate required config keys
+        required_keys = ['UCSC_GENOME_ASSEMBLY', 'UCSC_UPSTREAM_DISTANCE', 'UCSC_DOWNSTREAM_DISTANCE']
+        missing_keys = [key for key in required_keys if key not in CONFIG]
+        if missing_keys:
+            print(f"❌ Error: Missing required configuration keys in config.yaml:")
+            for key in missing_keys:
+                print(f"   - {key}")
+            print(f"\n💡 Please add these keys to your config.yaml file.")
+            sys.exit(1)
+        
+        genome = CONFIG.get("UCSC_GENOME_ASSEMBLY")
+        up_distance = int(CONFIG.get("UCSC_UPSTREAM_DISTANCE"))
+        down_distance = int(CONFIG.get("UCSC_DOWNSTREAM_DISTANCE"))
+        up_seq, down_seq = get_flanking_sequences(chrom, start, end, up_distance, down_distance, strand, genome)
         
         if up_seq:
             upstream_records.append((f"{label}_upstream", up_seq))
@@ -255,17 +282,12 @@ def main():
     
     if args.scan_pam:
         if args.qc:
-            # Apply QC to all candidates
-            qc_results = qc_pam_sites(
-                qc_candidates,
-                gc_min=args.gc_min,
-                gc_max=args.gc_max,
-                max_poly_t=args.max_poly_t,
-                max_homopolymer=args.max_homopolymer
-            )
+            # Apply QC to all candidates using policy parameters
+            qc_results = qc_pam_sites(qc_candidates)
             
             # Write QC results (CSV format)
-            with open(args.qc_output, "w") as f:
+            qc_output = CONFIG.get("OUTPUTS_CRISPR_CANDIDATES_QC")
+            with open(qc_output, "w") as f:
                 f.write("parent,name,spacer,pam,strand,qc_status\n")
                 for result in qc_results:
                     parent, name, spacer, pam, strand, qc_status = result
@@ -273,13 +295,20 @@ def main():
             
             passed = sum(1 for r in qc_results if r[5].startswith("Pass"))
             total = len(qc_results)
-            print(f"✅ Saved {args.qc_output} ({passed}/{total} candidates passed QC)")
+            qc_output = CONFIG.get("OUTPUTS_CRISPR_CANDIDATES_QC")
+            print(f"✅ Saved {qc_output} ({passed}/{total} candidates passed QC)")
             
             # Write PAM candidates in FASTA format (QC-filtered)
-            write_pam_fasta(crispr_candidates, args.candidates_out, qc_results)
+            candidates_out = CONFIG.get("OUTPUTS_CRISPR_CANDIDATES")
+            write_pam_fasta(crispr_candidates, candidates_out, qc_results)
         else:
             # Write PAM candidates in FASTA format (all candidates)
-            write_pam_fasta(crispr_candidates, args.candidates_out)
+            candidates_out = CONFIG.get("OUTPUTS_CRISPR_CANDIDATES")
+            write_pam_fasta(crispr_candidates, candidates_out)
+    
+    # Encourage manifest creation
+    print("\n📋 Run completed! Consider creating a manifest for reproducibility:")
+    print(f"   python manifest.py --config config.yaml --policy policy.yaml --stats '{{\"targets_processed\": {len(targets)}, \"pam_sites_found\": {len(crispr_candidates)}, \"genome_assembly\": \"{CONFIG.get('UCSC_GENOME_ASSEMBLY')}\"}}'")
 
 if __name__ == "__main__":
     main()

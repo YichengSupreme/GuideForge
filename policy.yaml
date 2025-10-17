@@ -1,0 +1,45 @@
+# CRISPR Pipeline Policy Configuration
+# This file contains quality control parameters and restriction site definitions
+# that can be customized for different lab policies or experimental requirements
+
+# Quality Control Parameters
+quality_control:
+  # GC content limits (as fractions)
+  gc_min: 0.35
+  gc_max: 0.65
+  
+  # Homopolymer and poly-T limits
+  max_poly_t: 4
+  max_homopolymer: 5
+  
+  # Restriction sites to avoid (comma-separated list)
+  # Common restriction enzymes: EcoRI, HindIII, BamHI, KpnI, NotI
+  restriction_sites:
+    - "GAATTC"    # EcoRI
+    - "AAGCTT"    # HindIII
+    - "GGATCC"    # BamHI
+    - "GGTACC"    # KpnI
+    - "GCGGCCGC"  # NotI
+
+# Guide Selection Parameters
+guide_selection:
+  num_guides_per_gene: 5
+  min_on_target_score: 40
+  min_specificity_score: 70
+  accepted_pams: ["NGG"] # ["NGG", "NAG"]
+  min_spacing_bp: 30
+
+# Advanced Filtering Rules
+filters:
+  exclude_motifs: []  # e.g. ["TTTT", "AAAA", "GGGG"] - Filter out problematic sequence motifs
+
+
+# Project Metadata
+metadata:
+  project_context: "macrophage knockout validation"
+  notes: "Applies standard Cas9 rules; validated for CD14+ RNA-seq follow-up"
+  genome_build: "hg38"
+
+# Potential Future Features
+exclude_regions_bed: "data/blacklist_hg38.bed"  # BED file filtering
+max_repeat_percent: 0.1  # Repeat content analysis

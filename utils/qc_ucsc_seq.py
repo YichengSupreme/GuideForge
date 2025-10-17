@@ -18,24 +18,43 @@ Usage:
     python qc_ucsc_seq.py CRISPR_candidates.txt --output qc_results.txt
 """
 
-import argparse, re, sys
+import argparse, re, sys, yaml
 from pathlib import Path
 
 def load_config():
-    """Load configuration from config.sh file."""
-    config_file = Path(__file__).parent / "config.sh"
+    """Load configuration from config.yaml and policy.yaml files."""
+    config_file = Path(__file__).parent.parent / "config.yaml"
     if not config_file.exists():
         return {}
     
-    config = {}
     with open(config_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                value = value.strip('"\'')
-                config[key.strip()] = value
-    return config
+        config = yaml.safe_load(f)
+    
+    # Load policy file if specified
+    policy_file = config.get('policy_file', './policy.yaml')
+    policy_path = Path(__file__).parent.parent / policy_file
+    
+    if policy_path.exists():
+        with open(policy_path, 'r') as f:
+            policy = yaml.safe_load(f)
+        
+        # Merge policy into config
+        config['policy'] = policy
+    
+    # Flatten the nested structure for backward compatibility
+    def flatten_dict(d, prefix=''):
+        flattened = {}
+        for key, value in d.items():
+            new_key = f'{prefix}_{key.upper()}' if prefix else key.upper()
+            if isinstance(value, dict):
+                flattened.update(flatten_dict(value, new_key))
+            else:
+                flattened[new_key] = value
+        return flattened
+    
+    flattened = flatten_dict(config)
+    
+    return flattened
 
 CONFIG = load_config()
 
@@ -50,13 +69,17 @@ def gc_content(seq: str) -> float:
     return gc / len(seq) if len(seq) > 0 else 0.0
 
 
-def has_poly_t(seq: str, length: int = 4) -> bool:
+def has_poly_t(seq: str, length: int = None) -> bool:
     """Check if sequence contains a run of 'T's that may terminate transcription."""
+    # Always use config values (parameters will be None from our pipeline)
+    length = int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_POLY_T"))
     return "T" * length in seq.upper()
 
 
-def has_homopolymer(seq: str, max_len: int = 5) -> bool:
+def has_homopolymer(seq: str, max_len: int = None) -> bool:
     """Detect any homopolymer (AAAAA, CCCCC, etc.) longer than allowed."""
+    # Always use config values (parameters will be None from our pipeline)
+    max_len = int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_HOMOPOLYMER"))
     seq = seq.upper()
     return bool(re.search(r"(A{%d,}|T{%d,}|C{%d,}|G{%d,})" % (max_len, max_len, max_len, max_len), seq))
 
@@ -64,19 +87,42 @@ def has_homopolymer(seq: str, max_len: int = 5) -> bool:
 def has_restriction_site(seq: str) -> bool:
     """
     Detect restriction sites that may interfere with plasmid assembly.
-    Sites are configurable via config.sh QC_RESTRICTION_SITES setting.
+    Sites are configurable via policy.yaml.
     """
     seq = seq.upper()
     
-    # Get restriction sites from config, fallback to defaults
-    restriction_sites_str = CONFIG.get("QC_RESTRICTION_SITES", "GAATTC,AAGCTT,GGATCC,GGTACC,GCGGCCGC")
-    restriction_sites = [site.strip() for site in restriction_sites_str.split(",") if site.strip()]
+    # Get restriction sites from policy config (no defaults - must be defined in policy.yaml)
+    if "POLICY_QUALITY_CONTROL_RESTRICTION_SITES" not in CONFIG:
+        print(f"❌ Error: Missing required policy key 'POLICY_QUALITY_CONTROL_RESTRICTION_SITES' in policy.yaml")
+        print(f"💡 Please add this key to your policy.yaml file.")
+        sys.exit(1)
+    
+    restriction_sites = CONFIG.get("POLICY_QUALITY_CONTROL_RESTRICTION_SITES")
     
     return any(site in seq for site in restriction_sites)
 
 
-def gc_within_range(seq: str, gc_min: float = 0.35, gc_max: float = 0.80) -> bool:
+def has_excluded_motifs(seq: str) -> bool:
+    """
+    Check if sequence contains excluded motifs (e.g., poly-T, poly-A, poly-G).
+    Motifs are configurable via policy.yaml.
+    """
+    seq = seq.upper()
+    
+    # Get excluded motifs from policy config
+    excluded_motifs = CONFIG.get("POLICY_FILTERS_EXCLUDE_MOTIFS", [])
+    
+    return any(motif in seq for motif in excluded_motifs)
+
+
+def gc_within_range(seq: str, gc_min: float = None, gc_max: float = None) -> bool:
     """Check if GC content is within an acceptable range for stable binding."""
+    # Use policy values if not provided
+    if gc_min is None:
+        gc_min = float(CONFIG.get("POLICY_QUALITY_CONTROL_GC_MIN"))
+    if gc_max is None:
+        gc_max = float(CONFIG.get("POLICY_QUALITY_CONTROL_GC_MAX"))
+    
     gc = gc_content(seq)
     return gc_min <= gc <= gc_max
 
@@ -100,11 +146,21 @@ def basic_qc(seq: str,
     """
     seq = seq.upper()
     
-    # Use config values as defaults if not provided
-    gc_min = gc_min or float(CONFIG.get("QC_GC_MIN", "0.35"))
-    gc_max = gc_max or float(CONFIG.get("QC_GC_MAX", "0.80"))
-    max_poly_t = max_poly_t or int(CONFIG.get("QC_MAX_POLY_T", "4"))
-    max_homopolymer = max_homopolymer or int(CONFIG.get("QC_MAX_HOMOPOLYMER", "5"))
+    # Use policy config values as defaults if not provided
+    required_qc_keys = ['POLICY_QUALITY_CONTROL_GC_MIN', 'POLICY_QUALITY_CONTROL_GC_MAX', 
+                       'POLICY_QUALITY_CONTROL_MAX_POLY_T', 'POLICY_QUALITY_CONTROL_MAX_HOMOPOLYMER']
+    missing_keys = [key for key in required_qc_keys if key not in CONFIG]
+    if missing_keys:
+        print(f"❌ Error: Missing required QC policy keys in policy.yaml:")
+        for key in missing_keys:
+            print(f"   - {key}")
+        print(f"💡 Please add these keys to your policy.yaml file.")
+        sys.exit(1)
+    
+    gc_min = gc_min or float(CONFIG.get("POLICY_QUALITY_CONTROL_GC_MIN"))
+    gc_max = gc_max or float(CONFIG.get("POLICY_QUALITY_CONTROL_GC_MAX"))
+    max_poly_t = max_poly_t or int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_POLY_T"))
+    max_homopolymer = max_homopolymer or int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_HOMOPOLYMER"))
 
     # GC content check
     gc = gc_content(seq)
@@ -124,6 +180,10 @@ def basic_qc(seq: str,
     # Restriction enzyme sites
     if has_restriction_site(seq):
         return False, "Restriction site"
+
+    # Excluded motifs
+    if has_excluded_motifs(seq):
+        return False, "Excluded motif"
 
     return True, "Pass"
 
@@ -167,14 +227,8 @@ def main():
     ap = argparse.ArgumentParser(description="Apply QC filters to CRISPR PAM sites")
     ap.add_argument("input", help="Input CSV file with PAM sites")
     ap.add_argument("--output", default="qc_results.txt", help="Output file (default: qc_results.txt)")
-    ap.add_argument("--gc-min", type=float, default=float(CONFIG.get("QC_GC_MIN", "0.35")), 
-                   help=f"Minimum GC content (default: {CONFIG.get('QC_GC_MIN', '0.35')})")
-    ap.add_argument("--gc-max", type=float, default=float(CONFIG.get("QC_GC_MAX", "0.80")), 
-                   help=f"Maximum GC content (default: {CONFIG.get('QC_GC_MAX', '0.80')})")
-    ap.add_argument("--max-poly-t", type=int, default=int(CONFIG.get("QC_MAX_POLY_T", "4")), 
-                   help=f"Maximum consecutive T's (default: {CONFIG.get('QC_MAX_POLY_T', '4')})")
-    ap.add_argument("--max-homopolymer", type=int, default=int(CONFIG.get("QC_MAX_HOMOPOLYMER", "5")), 
-                   help=f"Maximum homopolymer length (default: {CONFIG.get('QC_MAX_HOMOPOLYMER', '5')})")
+    # QC parameters are now controlled by policy.yaml only for reproducibility
+    # Use --policy flag to specify different policy files if needed
     ap.add_argument("--filtered-only", action="store_true", help="Only output candidates that pass QC")
     
     args = ap.parse_args()
@@ -183,7 +237,13 @@ def main():
         print(f"❌ Input file not found: {args.input}")
         return
     
-    print(f"🔬 QC Parameters: GC {args.gc_min:.2f}-{args.gc_max:.2f}")
+    # Get QC parameters from policy (no defaults - must be defined in policy.yaml)
+    gc_min = float(CONFIG.get("POLICY_QUALITY_CONTROL_GC_MIN"))
+    gc_max = float(CONFIG.get("POLICY_QUALITY_CONTROL_GC_MAX"))
+    max_poly_t = int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_POLY_T"))
+    max_homopolymer = int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_HOMOPOLYMER"))
+    
+    print(f"🔬 QC Parameters (from policy.yaml): GC {gc_min:.2f}-{gc_max:.2f}, max poly-T {max_poly_t}, max homopolymer {max_homopolymer}")
     
     # Read PAM sites
     candidates = []
@@ -198,13 +258,13 @@ def main():
     
     print(f"📖 Found {len(candidates)} PAM sites")
     
-    # Apply QC
+    # Apply QC using policy parameters
     qc_results = qc_pam_sites(
         candidates,
-        gc_min=args.gc_min,
-        gc_max=args.gc_max,
-        max_poly_t=args.max_poly_t,
-        max_homopolymer=args.max_homopolymer
+        gc_min=gc_min,
+        gc_max=gc_max,
+        max_poly_t=max_poly_t,
+        max_homopolymer=max_homopolymer
     )
     
     # Filter if requested
