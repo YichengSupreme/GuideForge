@@ -9,7 +9,7 @@ A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT (I
 1. **Set up your IDT session cookie** in `config.yaml`
 2. **Create targets.txt** with your coordinates:
    ```bash
-   echo "chr17:7668402-7668521:+" > targets.txt
+   echo "chr17:7668402-7668521:+" > targets.txt # or manual addition
    ```
 3. **Run the pipeline:**
    ```bash
