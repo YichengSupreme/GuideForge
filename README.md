@@ -1,6 +1,6 @@
 # GuideForge - Automated CRISPR gRNA Design Pipeline
 
-[![CI](https://github.com/andysu/GuideForge/actions/workflows/ci.yaml/badge.svg)](https://github.com/andysu/GuideForge/actions/workflows/ci.yaml)
+[![CI](https://github.com/YichengSupreme/GuideForge/actions/workflows/ci.yaml/badge.svg)](https://github.com/YichengSupreme/GuideForge/actions/workflows/ci.yaml)
 
 A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT (Integrated DNA Technologies) CRISPR tools. The pipeline supports group-specific gRNA design specifications through policy.yaml and produces a manifest log per run for reproducibility tracking. The pipeline includes a configurable PAM scanner supporting multiple PAM patterns and comprehensive quality control filtering.
 
