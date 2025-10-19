@@ -33,10 +33,10 @@ make run
 # Quick test (no IDT tested)
 make test
 
-# Clean up generated files
+# Clean up generated files (logs, csvs, but does not remove the manifest)
 make clean
 
-# Show all available commands
+# Show all available make commands
 make help
 ```
 
