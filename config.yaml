@@ -10,6 +10,10 @@ ucsc:
   upstream_output: "Upstream_sequences.txt"
   downstream_output: "Downstream_sequences.txt"
 
+# PAM Scanning Settings
+pam_scanning:
+  pattern: "NGG"  # PAM pattern (NGG, RGG, VGG, etc.)
+
 # Output File Settings
 outputs:
   # UCSC sequence outputs
@@ -40,7 +44,7 @@ idt:
   poll_max: 10
   retry_attempts: 3
   session_cookie: |
-    YOUR_SESSION_COOKIE_HERE
+    YOUR_IDT_SESSION_COOKIE_HERE
 
 # Policy Configuration (Quality Control Settings)
 policy_file: "./policy.yaml"

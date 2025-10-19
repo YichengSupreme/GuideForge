@@ -1,55 +1,106 @@
-# CRISPR Target Automation
+# GuideForge - modular, reproducible CRISPR gRNA design pipeline that integrates UCSC Genome Browser and IDT APIs for automated guide selection
 
-A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT CRISPR tools.
+
+A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT (Integrated DNA Technologies) CRISPR tools. The pipeline supports group-specific gRNA design specifications through policy.yaml and produces a manifest log per run for reproducibility tracking. The pipeline includes a configurable PAM scanner supporting multiple PAM patterns and comprehensive quality control filtering.
+---
+
+## 🚀 Quick Start
+
+1. **Set up your IDT session cookie** in `config.yaml`
+2. **Create targets.txt** with your coordinates:
+   ```bash
+   echo "chr17:7668402-7668521:+" > targets.txt
+   ```
+3. **Run the pipeline:**
+   ```bash
+   make run
+   ```
+
+**That's it!** You'll get  CRISPR gRNA sequences ranked by IDT's on + off targets scores.
+
+
+## 🛠️ Quick Commands (Makefile)
+
+For convenience, you can use these simple commands:
+
+```bash
+# Install dependencies
+make install
+
+# Run full pipeline
+make run
+
+# Quick test (no IDT tested)
+make test
+
+# Clean up generated files
+make clean
+
+# Show all available commands
+make help
+```
+
+**Note:** The `make run` command expects a `targets.txt` file with your coordinates.
 
 ## 🔄 Pipeline Overview
 
 ```mermaid
 flowchart TD
-    A["Input: Genomic Coordinates<br/>chr17:7668402-7668521:+"] --> B["get_ucsc_sequences.py"]
+    A["🧬 Input: Genomic Coordinates<br/>chr17:7668402-7668521:+"] --> B["🚀 run_pipeline.py<br/>Main Pipeline"]
 
-    B --> C{Options}
-    C -->|Basic| D["Fetch Upstream/Downstream<br/>Sequences from UCSC"]
-    C -->|--scan-pam| E["Scan for SpCas9 PAM sites<br/>NGG patterns"]
-    C -->|--qc| F["Apply Quality Control<br/>GC content, homopolymers, etc."]
+    B --> C{Choose Analysis Level}
+    C -->|Basic| D["📥 Fetch Sequences<br/>UCSC Genome Browser"]
+    C -->|+PAM| E["🔍 Find CRISPR Sites<br/>SpCas9 NGG patterns"]
+    C -->|+QC| F["✅ Quality Control<br/>GC, homopolymers, motifs"]
 
-    D --> G["Upstream_sequences.txt<br/>Downstream_sequences.txt"]
-    E --> H["CRISPR_candidates.txt<br/>FASTA format"]
-    F --> I["CRISPR_candidates_qc.csv<br/>QC results"]
+    D --> G["📄 Upstream_sequences.txt<br/>📄 Downstream_sequences.txt"]
+    E --> H["📄 CRISPR_candidates.txt<br/>FASTA format"]
+    F --> I["📊 CRISPR_candidates_qc.csv<br/>QC results"]
 
-    G --> J["IDT Analysis"]
+    G --> J["🧪 IDT Analysis<br/>On/Off-target Scoring"]
     H --> J
     I --> J
 
-    J --> K["idt_batch_crispr.py<br/>Batch API calls"]
-    K --> L["CRISPR_candidates_idt.csv<br/>Ranked results with on/off-target scores"]
-    L --> M["Final Results<br/>Best CRISPR sites"]
+    J --> K["📈 CRISPR_candidates_idt.csv<br/>Ranked by combined score"]
+    K --> L["🏆 Top Results<br/>Best CRISPR guides ready for experiments"]
 
-    style A fill:#e1f5fe,stroke:#0277bd,stroke-width:1px
-    style B fill:#fff3e0,stroke:#ffb300,stroke-width:1px
-    style C fill:#fce4ec
-    style K fill:#fff3e0,stroke:#ffb300,stroke-width:1px
-    style J fill:#f3e5f5,stroke:#8e24aa,stroke-width:1px
-    style M fill:#c8e6c9,stroke:#2e7d32,stroke-width:1px
+    style A fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    style B fill:#fff3e0,stroke:#ffb300,stroke-width:2px
+    style C fill:#fce4ec,stroke:#e91e63,stroke-width:2px
+    style J fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px
+    style L fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
 ```
 
-## 🧬 Modular Scripts that can be ran as a pipeline or as individual tasks
+## 🧬 How to use
 
-#### 1. **`utils/get_ucsc_sequences.py`** - Fetch Sequences Only
-**When to use:** You want to get DNA sequences from UCSC but analyze them elsewhere
+#### 1. **`run_pipeline.py`** - Complete Pipeline (Recommended)
+**When to use:** You want the full workflow from chromosome coordinates to ranked results
 
 ```bash
-# Basic usage 
+# Complete pipeline
+python run_pipeline.py targets.txt --scan-pam --qc
+
+# With guide selection
+python run_pipeline.py targets.txt --scan-pam --qc --select-guides
+```
+
+**Note**: Only QC-passing candidates are sent to IDT. The speed of IDT analysis depends on the IDT tool's response time, which may take several minutes for large batches.
+---
+
+#### 2. **`utils/get_ucsc_sequences.py`** - Fetch & Analyze Sequences
+**When to use:** You want sequences + PAM sites + QC, but handle sequence selection elsewhere
+
+```bash
+
+# Basic usage - get up/downstream sequences 
 python utils/get_ucsc_sequences.py targets.txt
 
-# Single coordinate
-python utils/get_ucsc_sequences.py chr17:7668402-7668421:+
+# Get up/downstream sequences + scan for PAM sites
+python utils/get_ucsc_sequences.py targets.txt --scan-pam
 
-# Scan for PAM sites
-python utils/get_ucsc_sequences.py chr17:7668402-7668421:+ --scan-pam
-
-# With quality control
+# Get sequences + scan PAM sites + apply quality control
 python utils/get_ucsc_sequences.py targets.txt --scan-pam --qc
+
 ```
 
 **Note:** All parameters (distances, genome, QC settings) are controlled by `config.yaml` and `policy.yaml` for reproducibility.
@@ -65,13 +116,13 @@ python utils/get_ucsc_sequences.py targets.txt --scan-pam --qc
 
 ---
 
-#### 2. **`utils/idt_batch_crispr.py`** - Analyze Existing Sequences
-**When to use:** You already have FASTA files and want IDT analysis
+#### 3. **`utils/idt_batch_crispr.py`** - Analyze Existing Sequences
+**When to use:** You already have FASTA files and want IDT on/off target scores
 
 **Uses:** https://eu.idtdna.com/site/order/designtool/index/CRISPR_SEQUENCE
 
 ```bash
-# Test IDT connection
+# Test IDT connection if run without txt files
 python utils/idt_batch_crispr.py
 
 # Analyze one file
@@ -82,44 +133,18 @@ python utils/idt_batch_crispr.py upstream.txt downstream.txt exon.txt
 ```
 
 **Input:** FASTA-style .txt files
-**Output:** `{filename}_idt.csv` with ranked results
+**Output:** `{filename}_idt.csv` with ranked results (ranked with the on_plus_off column)
 - Contains columns: `sequence_name`, `dna_sequence`, `on_target_score`, `off_target_score`, `on_plus_off`
 - Sorted by `on_plus_off` (highest scores first)
 
----
 
-#### 3. **`run_pipeline.py`** - Complete Pipeline (Recommended)
-**When to use:** You want the full workflow from chromosome coordinates to ranked results
-
-```bash
-# Complete pipeline
-python run_pipeline.py targets.txt --scan-pam --qc
-
-# With guide selection
-python run_pipeline.py targets.txt --scan-pam --qc --select-guides
-```
-
-#### 4. **`utils/run_CRISPR_target_automation.py`** - Advanced Pipeline
-**When to use:** You need more control over the pipeline execution
-
-```bash
-# Complete pipeline
-python utils/run_CRISPR_target_automation.py targets.txt --scan-pam --qc
-```
-
-**Input:** Genomic coordinates only
-**Output:** Complete analysis with ranked results
-- `Upstream_sequences_idt.csv` - Ranked upstream CRISPR sites
-- `Downstream_sequences_idt.csv` - Ranked downstream CRISPR sites
-- `CRISPR_candidates_idt.csv` - Ranked PAM sites (if --scan-pam used)
-
----
 
 ## 🎯 Which Script Should I Use?
 
 | Your Situation | Use This Script | Why |
 |----------------|-----------------|-----|
-| I have coordinates, want full analysis | `python run_pipeline.py targets.txt --scan-pam --qc` | Complete pipeline with PAM + QC |
+| I have coordinates, want full analysis | `python run_pipeline.py targets.txt --scan-pam --qc` | Complete pipeline with PAM + QC + automatic manifest |
+| I have coordinates, want full analysis + pick top guides  | `python run_pipeline.py targets.txt --scan-pam --qc --select-guides` | Complete pipeline with automatic guide selection |
 | I have coordinates, want sequences + PAM + QC | `python utils/get_ucsc_sequences.py targets.txt --scan-pam --qc` | Find and filter CRISPR targets |
 | I have coordinates, want sequences + PAM only | `python utils/get_ucsc_sequences.py targets.txt --scan-pam` | Find CRISPR targets (no filtering) |
 | I have coordinates, want up/downstream sequences only | `python utils/get_ucsc_sequences.py targets.txt` | Just fetch sequences |
@@ -151,14 +176,12 @@ python utils/qc_ucsc_seq.py CRISPR_candidates.txt --output qc_results.csv
 ```
 
 #### **`utils/manifest.py`** - Run Tracking
-**When to use:** You want to create a manifest for reproducibility tracking
+**When to use:** Manifests are automatically created per full pipeline run - no manual creation needed!
+
 
 ```bash
-# Create a basic manifest
-python utils/manifest.py --config config.yaml --policy policy.yaml
-
-# Create manifest with custom stats
-python utils/manifest.py --config config.yaml --policy policy.yaml --stats '{"n_guides": 1000, "passed_qc": 850}'
+# Compare two runs to see what changed
+python utils/manifest.py --compare manifest_run1.json manifest_run2.json
 ```
 
 ---
@@ -175,26 +198,23 @@ ucsc:
   genome_assembly: "hg38"
   retries: 3
 
+# PAM Scanning Settings
+pam_scanning:
+  pattern: "NGG"  # PAM pattern (required: NGG, RGG, VGG, etc.)
+
 # IDT Analysis Settings
 idt:
   batch_size: 10
   timeout: 60
   session_cookie: "ASP.NET_SessionId=YOUR_SESSION_ID_HERE; ..."
-  upstream_results: "Upstream_sequences_idt.csv"
-  downstream_results: "Downstream_sequences_idt.csv"
 
-# Quality Control Settings
-qc:
-  gc_min: 0.35
-  gc_max: 0.65
-  max_poly_t: 4
-  max_homopolymer: 5
-  restriction_sites:
-    - "GAATTC"  # EcoRI
-    - "AAGCTT"  # HindIII
-    - "GGATCC"  # BamHI
-    - "GGTACC"  # KpnI
-    - "GCGGCCGC"  # NotI
+# Output File Settings
+outputs:
+  upstream_sequences: "Upstream_sequences.txt"
+  downstream_sequences: "Downstream_sequences.txt"
+  crispr_candidates: "CRISPR_candidates.txt"
+  crispr_candidates_qc: "CRISPR_candidates_qc.csv"
+  top_guides: "top_CRISPR_candidates_idt.csv"
 
 # System Settings
 system:
@@ -203,6 +223,106 @@ system:
 ```
 
 **Important**: You must update the `session_cookie` in `config.yaml` with your valid IDT session cookie.
+
+**Customization**: You can customize output file names in the `outputs` section of `config.yaml`.
+
+**PAM Patterns**: You must specify the PAM pattern in the `pam_scanning` section of config.yaml. Supported patterns:
+- `NGG` - Any nucleotide + GG (SpCas9)
+- `RGG` - Purine + GG (A or G)
+- `VGG` - Not T + GG (A, C, or G)
+- `SGG` - Strong + GG (G or C)
+- Custom patterns using ambiguity codes: N=any, R=AG, Y=CT, S=GC, W=AT, K=GT, M=AC, B=CGT, D=AGT, H=ACT, V=ACG
+
+---
+
+## 🏛️ Group-Specific gRNA Design Specifications
+
+The pipeline supports customizable gRNA design specifications through `policy.yaml`, allowing different research groups to define their own quality control parameters and selection criteria.
+
+### Policy Configuration
+
+Edit `policy.yaml` to customize your group's gRNA design standards:
+
+```yaml
+# Quality Control Parameters
+quality_control:
+  gc_min: 0.35          # Minimum GC content
+  gc_max: 0.65          # Maximum GC content
+  max_poly_t: 4         # Maximum consecutive T's
+  max_homopolymer: 5    # Maximum homopolymer length
+  restriction_sites:    # Sites to avoid
+    - "GAATTC"          # EcoRI
+    - "AAGCTT"          # HindIII
+    - "GGATCC"          # BamHI
+
+# Guide Selection Parameters
+guide_selection:
+  num_guides_per_gene: 5      # Number of guides to select per target
+  min_on_target_score: 40     # Minimum IDT on-target score
+  min_off_target_score: 70    # Minimum off-target score
+  accepted_pams: ["NGG"]      # Accepted PAM sequences
+  min_spacing_bp: 30          # Minimum spacing between guides
+
+# Project Metadata
+metadata:
+  project_context: "macrophage knockout validation"
+  notes: "Applies standard Cas9 rules; validated for CD14+ RNA-seq follow-up"
+  genome_build: "hg38"
+```
+
+### Benefits of Policy-Based Configuration
+
+- **Reproducibility**: All group members use identical parameters
+- **Flexibility**: Easy to adjust criteria for different experimental needs
+- **Documentation**: Policy files serve as living documentation of design standards
+- **Version Control**: Track changes to design criteria over time
+
+---
+
+## 📋 Automatic Manifest Generation
+
+Every pipeline run automatically creates a `manifest.json` file for reproducibility tracking. This includes:
+
+- **Run metadata**: Timestamp, user, system information, Python version
+- **Configuration tracking**: MD5 hashes of config.yaml and policy.yaml files
+- **Pipeline parameters**: Genome assembly, distances, PAM pattern, enabled features
+- **Summary statistics**: Target counts, QC pass rates, runtime, file counts
+- **Reproducibility**: Compare manifests between runs to detect changes
+
+#### Example
+```json
+{
+  "run_id": "2024-01-15T10:30:45Z",
+  "guideforge_version": "1.1.0",
+  "backend": "IDT",
+  "genome_assembly": "hg38",
+  "config_hash": "a1b2c3d",
+  "policy_hash": "e4f5g6h",
+  "python_version": "3.9.7",
+  "user": "researcher",
+  "hostname": "lab-workstation-01",
+  "pipeline_type": "full_automation",
+  "targets_processed": 5,
+  "pam_candidates_found": 150,
+  "total_passed_qc": 120,
+  "total_failed_qc": 30,
+  "qc_pass_rate": 0.8,
+  "idt_files_processed": 1,
+  "idt_results_generated": 120,
+  "upstream_distance": 100,
+  "downstream_distance": 100,
+  "pam_scanning_enabled": true,
+  "pam_pattern": "NGG",
+  "qc_enabled": true,
+  "total_runtime_sec": 45.2
+}
+```
+
+**Benefits:**
+- **Audit Trail**: Track all pipeline runs and their parameters automatically
+- **Troubleshooting**: Identify when configuration changes affected results
+- **Collaboration**: Share exact run conditions with collaborators
+- **Publication**: Include manifest data for reproducibility in papers
 
 ---
 
@@ -218,6 +338,8 @@ system:
 
 #### **IDT Analysis Files:**
 - `CRISPR_candidates_idt.csv` - Ranked PAM sites (if --scan-pam used)
+- `top_CRISPR_candidates_idt.csv` - Top selected guides (if --select-guides used)
+
 
 **CRISPR_candidates_idt columns:**
 - `sequence_name` - Original identifier
@@ -226,20 +348,8 @@ system:
 - `off_target_score` - IDT off-target analysis
 - `on_plus_off` - Combined score (higher = better)
 
----
-
-## 🚀 Quick Start
-
-1. **Set up your cookie** in `config.yaml`
-2. **Create a targets.txt file** with gene coordinates:
-   ```
-   chr17:7668402-7668421:+
-   ```
-3. **Run the pipeline:**
-   ```bash
-   python run_pipeline.py targets.txt --scan-pam --qc 
-   ```
-4. **Open the results** in Excel and sort by `on_plus_off` column
+#### **Reproducibility Files:**
+- `manifest.json` - Run metadata and configuration tracking (created automatically)
 
 ---
 
@@ -319,7 +429,7 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 
 ## 🔧 Requirements
 
-- Python 3.6+
+- Python 3.9+
 - Required Python packages: `requests`, `pandas`, `PyYAML`
 - Valid IDT session cookie (update in `config.yaml`)
 - see requirements.txt
@@ -342,6 +452,10 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 2. Update the IDT session cookie in `config.yaml`
 3. Create your targets.txt file
 4. Run: `python run_pipeline.py targets.txt --scan-pam --qc`
+
+## 🧪 Testing and Development
+
+**Note:** The CI pipeline uses mock IDT responses for testing to ensure stability and security. Real IDT analysis requires valid session cookies which cannot be stored in public repositories.
 
 ## Future Notes
 - In future versions, grepping IDT cookie could be automated by fetching an anonymous session cookie via requests.get(), but for stability and reproducibility, the current version uses a user-supplied cookie.

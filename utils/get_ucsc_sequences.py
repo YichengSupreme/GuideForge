@@ -226,7 +226,11 @@ def main():
             upstream_records.append((f"{label}_upstream", up_seq))
             # Scan upstream sequence for PAM sites if requested
             if args.scan_pam:
-                sites = scan_spcas9_sites(up_seq)
+                pam_pattern = CONFIG.get("PAM_SCANNING_PATTERN")
+                if not pam_pattern:
+                    print(f"❌ Error: PAM_SCANNING_PATTERN not found in config.yaml")
+                    sys.exit(1)
+                sites = scan_spcas9_sites(up_seq, pam_pattern)
                 for idx, (spacer, pam, site_strand, pos) in enumerate(sites, 1):
                     # Sanitize label for IDT API (remove colons and plus signs, keep coordinate hyphens)
                     safe_label = label.replace(":", "_").replace("+", "plus")
@@ -247,7 +251,11 @@ def main():
             downstream_records.append((f"{label}_downstream", down_seq))
             # Scan downstream sequence for PAM sites if requested
             if args.scan_pam:
-                sites = scan_spcas9_sites(down_seq)
+                pam_pattern = CONFIG.get("PAM_SCANNING_PATTERN")
+                if not pam_pattern:
+                    print(f"❌ Error: PAM_SCANNING_PATTERN not found in config.yaml")
+                    sys.exit(1)
+                sites = scan_spcas9_sites(down_seq, pam_pattern)
                 for idx, (spacer, pam, site_strand, pos) in enumerate(sites, 1):
                     # Sanitize label for IDT API (remove colons and plus signs, keep coordinate hyphens)
                     safe_label = label.replace(":", "_").replace("+", "plus")
@@ -285,13 +293,13 @@ def main():
             # Apply QC to all candidates using policy parameters
             qc_results = qc_pam_sites(qc_candidates)
             
-            # Write QC results (CSV format)
+            # Write QC results (CSV format with individual QC columns)
             qc_output = CONFIG.get("OUTPUTS_CRISPR_CANDIDATES_QC")
             with open(qc_output, "w") as f:
-                f.write("parent,name,spacer,pam,strand,qc_status\n")
+                f.write("parent,name,spacer,pam,strand,qc_status,gc_content,poly_t,homopolymer,restriction_sites,excluded_motifs\n")
                 for result in qc_results:
-                    parent, name, spacer, pam, strand, qc_status = result
-                    f.write(f"{parent},{name},{spacer},{pam},{strand},{qc_status}\n")
+                    parent, name, spacer, pam, strand, qc_status, gc_content, poly_t, homopolymer, restriction_sites, excluded_motifs = result
+                    f.write(f"{parent},{name},{spacer},{pam},{strand},{qc_status},{gc_content},{poly_t},{homopolymer},{restriction_sites},{excluded_motifs}\n")
             
             passed = sum(1 for r in qc_results if r[5].startswith("Pass"))
             total = len(qc_results)

@@ -344,7 +344,7 @@ Examples:
     # Step 3: Select top guides based on policy (optional)
     if args.select_guides:
         # Validate required guide selection policy keys
-        required_guide_keys = ['POLICY_GUIDE_SELECTION_MIN_ON_TARGET_SCORE', 'POLICY_GUIDE_SELECTION_MIN_SPECIFICITY_SCORE',
+        required_guide_keys = ['POLICY_GUIDE_SELECTION_MIN_ON_TARGET_SCORE', 'POLICY_GUIDE_SELECTION_MIN_OFF_TARGET_SCORE',
                               'POLICY_GUIDE_SELECTION_NUM_GUIDES_PER_GENE', 'POLICY_GUIDE_SELECTION_ACCEPTED_PAMS']
         missing_guide_keys = [key for key in required_guide_keys if key not in CONFIG]
         if missing_guide_keys:
@@ -492,6 +492,7 @@ Examples:
             "upstream_distance": CONFIG.get("UCSC_UPSTREAM_DISTANCE"),
             "downstream_distance": CONFIG.get("UCSC_DOWNSTREAM_DISTANCE"),
             "pam_scanning_enabled": args.scan_pam,
+            "pam_pattern": CONFIG.get("PAM_SCANNING_PATTERN") if args.scan_pam else None,
             "qc_enabled": args.qc,
             "total_runtime_sec": total_runtime_sec
         }

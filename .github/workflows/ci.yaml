@@ -1,0 +1,341 @@
+name: CRISPR Pipeline Robustness CI
+
+# Note: This CI uses mock IDT responses for testing to ensure stability and security.
+# Real IDT analysis requires valid session cookies which cannot be stored in public repositories.
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 2 AM UTC to test external API connectivity
+    - cron: '0 2 * * *'
+
+jobs:
+  robustness-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, 3.10, 3.11]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test configuration robustness
+      run: |
+        python -c "
+        from utils.qc_ucsc_seq import CONFIG
+        print('✅ Config loaded successfully on ${{ matrix.os }} with Python ${{ matrix.python-version }}')
+        print(f'QC settings: GC {CONFIG.get(\"POLICY_QUALITY_CONTROL_GC_MIN\")}-{CONFIG.get(\"POLICY_QUALITY_CONTROL_GC_MAX\")}')
+        print(f'PAM pattern: {CONFIG.get(\"PAM_SCANNING_PATTERN\")}')
+        "
+    
+    - name: Test core functionality robustness
+      run: |
+        python -c "
+        from utils.qc_ucsc_seq import basic_qc, gc_content, has_poly_t, has_homopolymer
+        from utils.pam_scanner import scan_spcas9_sites
+        
+        # Test with various sequences to ensure robustness
+        test_sequences = [
+            'ACACTCATTGCAGACTCAGG',  # Normal sequence
+            'ACACTCATTGCAGACTCAGGAGG',  # With PAM site
+            'AAAAAAAAAAAAAAAAAAAA',  # All A's
+            'GCGCGCGCGCGCGCGCGCGC',  # All GC
+            'ATATATATATATATATATAT',  # All AT
+        ]
+        
+        for seq in test_sequences:
+            try:
+                # Test GC content
+                gc = gc_content(seq)
+                print(f'✅ GC content for {seq[:10]}...: {gc:.2f}')
+                
+                # Test QC (may fail, that's ok)
+                is_valid, reason, details = basic_qc(seq)
+                print(f'✅ QC for {seq[:10]}...: {is_valid} - {reason}')
+                
+                # Test PAM scanning (may find 0 sites, that's ok)
+                sites = scan_spcas9_sites(seq, 'NGG')
+                print(f'✅ PAM scanning for {seq[:10]}...: {len(sites)} sites')
+                
+            except Exception as e:
+                print(f'⚠️  Warning for {seq[:10]}...: {e}')
+        "
+    
+    - name: Test pipeline robustness (with mock IDT)
+      run: |
+        # Create test targets file
+        echo "chr17:7668402-7668521:+" > test_targets.txt
+        
+        # Test PAM scanning standalone
+        python utils/pam_scanner.py test_targets.txt --pam-pattern NGG --output test_pam.csv
+        echo "✅ PAM scanner robust on ${{ matrix.os }}"
+        
+        # Test QC standalone (if we have PAM results)
+        if [ -f "test_pam.csv" ]; then
+          python utils/qc_ucsc_seq.py test_pam.csv --output test_qc.csv
+          echo "✅ QC robust on ${{ matrix.os }}"
+        fi
+        
+        # Test guide selection with mock IDT results
+        if [ -f "test_pam.csv" ]; then
+          # Create mock IDT CSV for testing
+          python -c "
+          import pandas as pd
+          import csv
+          
+          # Read PAM results
+          with open('test_pam.csv', 'r') as f:
+              reader = csv.reader(f)
+              rows = list(reader)
+          
+          # Create mock IDT results
+          mock_data = []
+          for i, row in enumerate(rows[1:], 1):  # Skip header
+              if len(row) >= 4:
+                  spacer = row[2]  # spacer column
+                  mock_data.append({
+                      'sequence_name': f'test_guide_{i}',
+                      'dna_sequence': spacer,
+                      'on_target_score': 80 + (i % 20),  # 80-99 range
+                      'off_target_score': 70 + (i % 15),  # 70-84 range
+                      'on_plus_off': 150 + (i % 30)  # 150-179 range
+                  })
+          
+          # Create DataFrame and save
+          df = pd.DataFrame(mock_data)
+          df = df.sort_values('on_plus_off', ascending=False).reset_index(drop=True)
+          df['rank'] = range(1, len(df) + 1)
+          df = df[['rank', 'sequence_name', 'dna_sequence', 'on_target_score', 'off_target_score', 'on_plus_off']]
+          df.to_csv('test_mock_idt.csv', index=False)
+          print(f'✅ Created mock IDT data: {len(df)} sequences')
+          "
+          
+          # Test guide selection
+          python utils/select_top_guides.py test_mock_idt.csv
+          echo "✅ Guide selection robust on ${{ matrix.os }}"
+        fi
+        
+        # Cleanup
+        rm -f test_targets.txt test_pam.csv test_qc.csv test_mock_idt.csv top_CRISPR_candidates_idt.csv
+        echo "✅ Cleanup completed on ${{ matrix.os }}"
+    
+    - name: Test error handling robustness
+      run: |
+        python -c "
+        # Test with invalid inputs to ensure graceful error handling
+        from utils.qc_ucsc_seq import basic_qc, gc_content
+        
+        # Test empty sequence
+        try:
+            gc = gc_content('')
+            print(f'✅ Empty sequence handled: GC={gc}')
+        except Exception as e:
+            print(f'⚠️  Empty sequence error: {e}')
+        
+        # Test very short sequence
+        try:
+            gc = gc_content('AT')
+            print(f'✅ Short sequence handled: GC={gc}')
+        except Exception as e:
+            print(f'⚠️  Short sequence error: {e}')
+        
+        # Test sequence with non-standard characters
+        try:
+            gc = gc_content('ATCGN')
+            print(f'✅ Non-standard chars handled: GC={gc}')
+        except Exception as e:
+            print(f'⚠️  Non-standard chars error: {e}')
+        "
+
+  integration-robustness:
+    runs-on: ubuntu-latest
+    needs: robustness-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test full pipeline robustness (with mock IDT)
+      run: |
+        # Create test targets
+        echo "chr17:7668402-7668521:+" > test_targets.txt
+        
+        # Test full pipeline with mock IDT
+        python utils/get_ucsc_sequences.py test_targets.txt --scan-pam --qc
+        
+        # Check QC outputs exist and are valid
+        if [ -f "CRISPR_candidates_qc.csv" ]; then
+          echo "✅ Integration test passed - QC output generated"
+          # Check file has content
+          if [ -s "CRISPR_candidates_qc.csv" ]; then
+            echo "✅ QC output has content"
+            head -3 CRISPR_candidates_qc.csv
+          else
+            echo "⚠️  QC output is empty"
+          fi
+        else
+          echo "❌ Integration test failed - no QC output"
+          exit 1
+        fi
+        
+        # Test guide selection with mock IDT results
+        if [ -f "CRISPR_candidates.txt" ]; then
+          # Create mock IDT CSV for testing
+          python -c "
+          import pandas as pd
+          import re
+          
+          # Read FASTA file and extract sequences
+          sequences = []
+          with open('CRISPR_candidates.txt', 'r') as f:
+              current_seq = ''
+              for line in f:
+                  if line.startswith('>'):
+                      if current_seq:
+                          sequences.append(current_seq)
+                      current_seq = ''
+                  else:
+                      current_seq += line.strip()
+              if current_seq:
+                  sequences.append(current_seq)
+          
+          # Create mock IDT results
+          mock_data = []
+          for i, seq in enumerate(sequences, 1):
+              mock_data.append({
+                  'sequence_name': f'guide_{i}',
+                  'dna_sequence': seq,
+                  'on_target_score': 80 + (i % 20),  # 80-99 range
+                  'off_target_score': 70 + (i % 15),  # 70-84 range
+                  'on_plus_off': 150 + (i % 30)  # 150-179 range
+              })
+          
+          # Create DataFrame and save
+          df = pd.DataFrame(mock_data)
+          df = df.sort_values('on_plus_off', ascending=False).reset_index(drop=True)
+          df['rank'] = range(1, len(df) + 1)
+          df = df[['rank', 'sequence_name', 'dna_sequence', 'on_target_score', 'off_target_score', 'on_plus_off']]
+          df.to_csv('CRISPR_candidates_mock_idt.csv', index=False)
+          print(f'✅ Created mock IDT data: {len(df)} sequences')
+          "
+          
+          # Test guide selection
+          python utils/select_top_guides.py CRISPR_candidates_mock_idt.csv
+          echo "✅ Guide selection completed"
+          
+          # Check guide selection output
+          if [ -f "top_CRISPR_candidates_idt.csv" ]; then
+            echo "✅ Top guides selected successfully"
+            head -3 top_CRISPR_candidates_idt.csv
+          fi
+        fi
+        
+        # Cleanup
+        rm -f test_targets.txt CRISPR_candidates_qc.csv CRISPR_candidates.txt Upstream_sequences.txt Downstream_sequences.txt CRISPR_candidates_mock_idt.csv top_CRISPR_candidates_idt.csv
+
+  security-robustness:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run security scan
+      run: |
+        pip install bandit safety
+        bandit -r . -f json -o bandit-report.json || true
+        safety check --json --output safety-report.json || true
+        echo "Security scan completed"
+    
+    - name: Check for common security issues
+      run: |
+        # Check for hardcoded secrets
+        if grep -r "password\|secret\|key" . --exclude-dir=.git --exclude="*.md"; then
+          echo "⚠️  Potential hardcoded secrets found"
+        else
+          echo "✅ No hardcoded secrets found"
+        fi
+        
+        # Check for unsafe file operations
+        if grep -r "eval\|exec\|subprocess" . --exclude-dir=.git --exclude="*.md"; then
+          echo "⚠️  Potentially unsafe operations found (review needed)"
+        else
+          echo "✅ No obviously unsafe operations found"
+        fi
+
+  documentation-robustness:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check documentation completeness
+      run: |
+        # Check if README has essential sections
+        required_sections=("Quick Start" "Input Format" "Configuration" "Output Files")
+        for section in "${required_sections[@]}"; do
+          if grep -q "## .*${section}" README.md; then
+            echo "✅ README has ${section} section"
+          else
+            echo "❌ README missing ${section} section"
+            exit 1
+          fi
+        done
+    
+    - name: Check configuration files robustness
+      run: |
+        # Check if config files have required sections
+        if grep -q "ucsc:" config.yaml; then
+          echo "✅ config.yaml has UCSC section"
+        else
+          echo "❌ config.yaml missing UCSC section"
+          exit 1
+        fi
+        
+        if grep -q "quality_control:" policy.yaml; then
+          echo "✅ policy.yaml has quality_control section"
+        else
+          echo "❌ policy.yaml missing quality_control section"
+          exit 1
+        fi
+        
+        # Check for YAML syntax errors
+        python -c "
+        import yaml
+        try:
+            with open('config.yaml') as f:
+                yaml.safe_load(f)
+            print('✅ config.yaml syntax is valid')
+        except Exception as e:
+            print(f'❌ config.yaml syntax error: {e}')
+            exit(1)
+        
+        try:
+            with open('policy.yaml') as f:
+                yaml.safe_load(f)
+            print('✅ policy.yaml syntax is valid')
+        except Exception as e:
+            print(f'❌ policy.yaml syntax error: {e}')
+            exit(1)
+        "

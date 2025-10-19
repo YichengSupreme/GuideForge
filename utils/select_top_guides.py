@@ -75,7 +75,7 @@ def apply_guide_selection_filters(df, config):
     
     # Get policy parameters
     min_on_target = config.get("POLICY_GUIDE_SELECTION_MIN_ON_TARGET_SCORE")
-    min_specificity = config.get("POLICY_GUIDE_SELECTION_MIN_SPECIFICITY_SCORE")
+    min_off_target = config.get("POLICY_GUIDE_SELECTION_MIN_OFF_TARGET_SCORE")
     accepted_pams = config.get("POLICY_GUIDE_SELECTION_ACCEPTED_PAMS", [])
     
     # Filter by on-target score
@@ -83,10 +83,10 @@ def apply_guide_selection_filters(df, config):
         df = df[df['on_target_score'] >= min_on_target]
         print(f"   On-target score ≥ {min_on_target}: {len(df)} sequences")
     
-    # Filter by specificity score
-    if min_specificity is not None:
-        df = df[df['off_target_score'] >= min_specificity]
-        print(f"   Specificity score ≥ {min_specificity}: {len(df)} sequences")
+    # Filter by off-target score (higher is better for IDT off_target_score)
+    if min_off_target is not None:
+        df = df[df['off_target_score'] >= min_off_target]
+        print(f"   Off-target score ≥ {min_off_target}: {len(df)} sequences")
     
     # Filter by PAM sites (if PAM information is available)
     if accepted_pams and 'pam' in df.columns:
@@ -190,7 +190,7 @@ Examples:
     # All guide selection parameters come from policy.yaml for reproducibility
     
     # Validate required guide selection policy keys
-    required_guide_keys = ['POLICY_GUIDE_SELECTION_MIN_ON_TARGET_SCORE', 'POLICY_GUIDE_SELECTION_MIN_SPECIFICITY_SCORE',
+    required_guide_keys = ['POLICY_GUIDE_SELECTION_MIN_ON_TARGET_SCORE', 'POLICY_GUIDE_SELECTION_MIN_OFF_TARGET_SCORE',
                           'POLICY_GUIDE_SELECTION_NUM_GUIDES_PER_GENE', 'POLICY_GUIDE_SELECTION_ACCEPTED_PAMS']
     missing_keys = [key for key in required_guide_keys if key not in CONFIG]
     if missing_keys:

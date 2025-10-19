@@ -25,8 +25,7 @@ quality_control:
 guide_selection:
   num_guides_per_gene: 5
   min_on_target_score: 40
-  min_specificity_score: 70
-  accepted_pams: ["NGG"] # ["NGG", "NAG"]
+  min_off_target_score: 40
   min_spacing_bp: 30
 
 # Advanced Filtering Rules
@@ -41,5 +40,6 @@ metadata:
   genome_build: "hg38"
 
 # Potential Future Features
-exclude_regions_bed: "data/blacklist_hg38.bed"  # BED file filtering
-max_repeat_percent: 0.1  # Repeat content analysis
+#exclude_regions_bed: BED file filtering
+#max_repeat_percent:  Repeat content analysis
+#min_spacing_bp :  Minimum spacing between guides

@@ -135,14 +135,15 @@ def basic_qc(seq: str,
              gc_min: float = None,
              gc_max: float = None,
              max_poly_t: int = None,
-             max_homopolymer: int = None) -> tuple[bool, str]:
+             max_homopolymer: int = None) -> tuple[bool, str, dict]:
     """
     Run a basic QC pipeline on a single gRNA sequence.
 
     Returns:
-        (is_valid, reason)
+        (is_valid, reason, qc_details)
         is_valid: True if sequence passes all filters
         reason:   "Pass" or description of the first failing check
+        qc_details: Dict with individual QC criteria results
     """
     seq = seq.upper()
     
@@ -162,30 +163,50 @@ def basic_qc(seq: str,
     max_poly_t = max_poly_t or int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_POLY_T"))
     max_homopolymer = max_homopolymer or int(CONFIG.get("POLICY_QUALITY_CONTROL_MAX_HOMOPOLYMER"))
 
+    # Initialize QC details and run all checks first
+    qc_details = {}
+    
     # GC content check
     gc = gc_content(seq)
-    if gc < gc_min:
-        return False, f"Low GC ({gc:.2f})"
-    if gc > gc_max:
-        return False, f"High GC ({gc:.2f})"
+    gc_pass = gc_min <= gc <= gc_max
+    qc_details['gc_content'] = f"Pass ({gc:.2f})" if gc_pass else f"Fail ({gc:.2f})"
 
     # Transcription terminator
-    if has_poly_t(seq, max_poly_t):
-        return False, f"PolyT (>{max_poly_t})"
+    poly_t_pass = not has_poly_t(seq, max_poly_t)
+    qc_details['poly_t'] = "Pass" if poly_t_pass else f"Fail (>{max_poly_t})"
 
     # Homopolymers (general)
-    if has_homopolymer(seq, max_homopolymer):
-        return False, f"Homopolymer (>{max_homopolymer})"
+    homopolymer_pass = not has_homopolymer(seq, max_homopolymer)
+    qc_details['homopolymer'] = "Pass" if homopolymer_pass else f"Fail (>{max_homopolymer})"
 
     # Restriction enzyme sites
-    if has_restriction_site(seq):
-        return False, "Restriction site"
+    restriction_pass = not has_restriction_site(seq)
+    qc_details['restriction_sites'] = "Pass" if restriction_pass else "Fail"
 
     # Excluded motifs
-    if has_excluded_motifs(seq):
-        return False, "Excluded motif"
+    motif_pass = not has_excluded_motifs(seq)
+    qc_details['excluded_motifs'] = "Pass" if motif_pass else "Fail"
+    
+    # Now check for failures in order of priority
+    if not gc_pass:
+        if gc < gc_min:
+            return False, f"Low GC ({gc:.2f})", qc_details
+        else:
+            return False, f"High GC ({gc:.2f})", qc_details
 
-    return True, "Pass"
+    if not poly_t_pass:
+        return False, f"PolyT (>{max_poly_t})", qc_details
+
+    if not homopolymer_pass:
+        return False, f"Homopolymer (>{max_homopolymer})", qc_details
+
+    if not restriction_pass:
+        return False, "Restriction site", qc_details
+
+    if not motif_pass:
+        return False, "Excluded motif", qc_details
+
+    return True, "Pass", qc_details
 
 
 # -------------------------------
@@ -203,13 +224,13 @@ def qc_pam_sites(candidates, gc_min=None, gc_max=None, max_poly_t=None, max_homo
         max_homopolymer (int): Maximum homopolymer length
         
     Returns:
-        list: List of tuples (parent, name, spacer, pam, strand, qc_status)
+        list: List of tuples (parent, name, spacer, pam, strand, qc_status, gc_content, poly_t, homopolymer, restriction_sites, excluded_motifs)
     """
     qc_results = []
     
     for candidate in candidates:
         parent, name, spacer, pam, strand = candidate
-        is_valid, reason = basic_qc(
+        is_valid, reason, qc_details = basic_qc(
             spacer,
             gc_min=gc_min,
             gc_max=gc_max,
@@ -218,7 +239,14 @@ def qc_pam_sites(candidates, gc_min=None, gc_max=None, max_poly_t=None, max_homo
         )
         
         qc_status = reason if is_valid else f"FAIL: {reason}"
-        qc_results.append((parent, name, spacer, pam, strand, qc_status))
+        qc_results.append((
+            parent, name, spacer, pam, strand, qc_status,
+            qc_details['gc_content'],
+            qc_details['poly_t'],
+            qc_details['homopolymer'],
+            qc_details['restriction_sites'],
+            qc_details['excluded_motifs']
+        ))
     
     return qc_results
 
@@ -274,10 +302,10 @@ def main():
     
     # Write results
     with open(args.output, "w") as f:
-        f.write("parent,name,spacer,pam,strand,qc_status\n")
+        f.write("parent,name,spacer,pam,strand,qc_status,gc_content,poly_t,homopolymer,restriction_sites,excluded_motifs\n")
         for result in qc_results:
-            parent, name, spacer, pam, strand, qc_status = result
-            f.write(f"{parent},{name},{spacer},{pam},{strand},{qc_status}\n")
+            parent, name, spacer, pam, strand, qc_status, gc_content, poly_t, homopolymer, restriction_sites, excluded_motifs = result
+            f.write(f"{parent},{name},{spacer},{pam},{strand},{qc_status},{gc_content},{poly_t},{homopolymer},{restriction_sites},{excluded_motifs}\n")
     
     passed = sum(1 for r in qc_results if r[5].startswith("Pass"))
     print(f"✅ Saved {args.output} ({passed}/{len(qc_results)} candidates passed QC)")
