@@ -1,6 +1,7 @@
 # GuideForge - modular, reproducible CRISPR gRNA design pipeline that integrates UCSC Genome Browser and IDT APIs for automated guide selection
 
 A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT (Integrated DNA Technologies) CRISPR tools. The pipeline supports group-specific gRNA design specifications through policy.yaml and produces a manifest log per run for reproducibility tracking. The pipeline includes a configurable PAM scanner supporting multiple PAM patterns and comprehensive quality control filtering.
+
 ---
 
 ## 🚀 Quick Start
@@ -85,6 +86,7 @@ python run_pipeline.py targets.txt --scan-pam --qc --select-guides
 ```
 
 **Note**: Only QC-passing candidates are sent to IDT. The speed of IDT analysis depends on the IDT tool's response time, which may take several minutes for large batches.
+
 ---
 
 #### 2. **`utils/get_ucsc_sequences.py`** - Fetch & Analyze Sequences
