@@ -461,5 +461,8 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 
 **Note:** The CI pipeline uses mock IDT responses for testing to ensure stability and security. Real IDT analysis requires valid session cookies which cannot be stored in public repositories.
 
+**Requirements:** Python 3.9+ (tested on Python 3.9-3.11)
+
+
 ## Future Notes
 - In future versions, grepping IDT cookie could be automated by fetching an anonymous session cookie via requests.get(), but for stability and reproducibility, the current version uses a user-supplied cookie.
