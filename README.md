@@ -466,3 +466,9 @@ The IDT CRISPR API requires a temporary browser session cookie to authenticate y
 
 ## Future Notes
 - In future versions, grepping IDT cookie could be automated by fetching an anonymous session cookie via requests.get(), but for stability and reproducibility, the current version uses a user-supplied cookie.
+
+## 📚 Citation
+
+If you use GuideForge in your research, please cite:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17393128.svg)](https://doi.org/10.5281/zenodo.17393128)
