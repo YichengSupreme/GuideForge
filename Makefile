@@ -16,8 +16,8 @@ test:  ## Run a small integration test (no IDT scoring)
 	@echo "✅ Test completed successfully."
 	@rm -f test_targets.txt CRISPR_candidates*.csv Upstream_sequences.txt Downstream_sequences.txt
 
-clean:  ## Remove generated files
-	rm -f CRISPR_candidates*.csv CRISPR_candidates.txt Upstream_sequences.txt Downstream_sequences.txt manifest*.json top_CRISPR_candidates*.csv
+clean:  ## Remove generated files (keeps manifests for reproducibility)
+	rm -f CRISPR_candidates*.csv CRISPR_candidates.txt Upstream_sequences.txt Downstream_sequences.txt top_CRISPR_candidates*.csv *.log
 
 dev-check:  ## Optional developer checks (lint, YAML validation)
 	@echo "🔍 Running developer checks..."

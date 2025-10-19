@@ -109,34 +109,33 @@ def select_top_guides(df, config):
     # Sort by combined score (on_plus_off) descending
     df = df.sort_values('on_plus_off', ascending=False)
     
-    # If we have gene information, select top guides per gene
-    if 'gene' in df.columns or 'parent' in df.columns:
-        gene_col = 'gene' if 'gene' in df.columns else 'parent'
+    # If we have parent sequence information, select top guides per parent
+    if 'parent_sequence' in df.columns:
         top_guides = []
         
-        for gene in df[gene_col].unique():
-            gene_guides = df[df[gene_col] == gene].copy()
+        for parent in df['parent_sequence'].unique():
+            parent_guides = df[df['parent_sequence'] == parent].copy()
             
-            # Select top guides for this gene with spacing requirements
+            # Select top guides for this parent sequence
             selected = []
-            for _, guide in gene_guides.iterrows():
+            for _, guide in parent_guides.iterrows():
                 if len(selected) >= num_guides_per_gene:
                     break
                 
                 # Check spacing from previously selected guides
                 if min_spacing > 0 and len(selected) > 0:
                     # This is a simplified spacing check - in practice you'd need genomic coordinates
-                    # For now, we'll just take the top N guides per gene
+                    # For now, we'll just take the top N guides per parent
                     pass
                 
                 selected.append(guide)
             
             top_guides.extend(selected)
-            print(f"   {gene}: selected {len(selected)} guides")
+            print(f"   {parent}: selected {len(selected)} guides")
         
         result_df = pd.DataFrame(top_guides)
     else:
-        # No gene information, just take top N overall
+        # No parent information, just take top N overall
         result_df = df.head(num_guides_per_gene)
         print(f"   Selected top {len(result_df)} guides overall")
     
@@ -189,9 +188,9 @@ Examples:
     
     # All guide selection parameters come from policy.yaml for reproducibility
     
-    # Validate required guide selection policy keys
+    # Validate required guide selection policy keys (accepted_pams is optional)
     required_guide_keys = ['POLICY_GUIDE_SELECTION_MIN_ON_TARGET_SCORE', 'POLICY_GUIDE_SELECTION_MIN_OFF_TARGET_SCORE',
-                          'POLICY_GUIDE_SELECTION_NUM_GUIDES_PER_GENE', 'POLICY_GUIDE_SELECTION_ACCEPTED_PAMS']
+                          'POLICY_GUIDE_SELECTION_NUM_GUIDES_PER_GENE']
     missing_keys = [key for key in required_guide_keys if key not in CONFIG]
     if missing_keys:
         print(f"❌ Error: Missing required guide selection policy keys in policy.yaml:")

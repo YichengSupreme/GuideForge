@@ -441,14 +441,32 @@ def process_file(txt_path, logger):
         
         time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
     
-    # Save final results
+    # Save final results with grouping by parent sequence
     try:
         df = pd.DataFrame(results, columns=["sequence_name", "dna_sequence", "on_target_score", "off_target_score", "on_plus_off"])
-        df = df.sort_values("on_plus_off", ascending=False)
+        
+        # Extract parent sequence from sequence_name (everything before the last underscore)
+        df['parent_sequence'] = df['sequence_name'].str.rsplit('_', n=1).str[0]
+        
+        # Group by parent sequence and rank within each group by on_plus_off (descending)
+        df['rank_within_parent'] = df.groupby('parent_sequence')['on_plus_off'].rank(method='dense', ascending=False).astype(int)
+        
+        # Sort by parent sequence, then by rank within parent
+        df = df.sort_values(['parent_sequence', 'rank_within_parent'])
+        
+        # Reorder columns for better readability
+        df = df[['parent_sequence', 'rank_within_parent', 'sequence_name', 'dna_sequence', 'on_target_score', 'off_target_score', 'on_plus_off']]
+        
         out_csv = f"{name}_idt.csv"
         df.to_csv(out_csv, index=False)
         logger.info(f"Saved final results: {out_csv} ({len(df)} sequences)")
         print(f"✅ Saved {out_csv} ({len(df)} sequences)")
+        
+        # Print summary by parent sequence
+        parent_summary = df.groupby('parent_sequence').size().sort_index()
+        print(f"Results by gene:")
+        for parent, count in parent_summary.items():
+            print(f"   {parent}: {count} guides")
         
         # Clean up temp files if run was successful
         temp_csv = f"{name}_idt_temp.csv"
