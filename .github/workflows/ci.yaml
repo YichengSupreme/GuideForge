@@ -94,35 +94,35 @@ jobs:
         if [ -f "test_pam.csv" ]; then
           # Create mock IDT CSV for testing
           python -c "
-          import pandas as pd
-          import csv
-          
-          # Read PAM results
-          with open('test_pam.csv', 'r') as f:
-              reader = csv.reader(f)
-              rows = list(reader)
-          
-          # Create mock IDT results
-          mock_data = []
-          for i, row in enumerate(rows[1:], 1):  # Skip header
-              if len(row) >= 4:
-                  spacer = row[2]  # spacer column
-                  mock_data.append({
-                      'sequence_name': f'test_guide_{i}',
-                      'dna_sequence': spacer,
-                      'on_target_score': 80 + (i % 20),  # 80-99 range
-                      'off_target_score': 70 + (i % 15),  # 70-84 range
-                      'on_plus_off': 150 + (i % 30)  # 150-179 range
-                  })
-          
-          # Create DataFrame and save
-          df = pd.DataFrame(mock_data)
-          df = df.sort_values('on_plus_off', ascending=False).reset_index(drop=True)
-          df['rank'] = range(1, len(df) + 1)
-          df = df[['rank', 'sequence_name', 'dna_sequence', 'on_target_score', 'off_target_score', 'on_plus_off']]
-          df.to_csv('test_mock_idt.csv', index=False)
-          print(f'✅ Created mock IDT data: {len(df)} sequences')
-          "
+import pandas as pd
+import csv
+
+# Read PAM results
+with open('test_pam.csv', 'r') as f:
+    reader = csv.reader(f)
+    rows = list(reader)
+
+# Create mock IDT results
+mock_data = []
+for i, row in enumerate(rows[1:], 1):  # Skip header
+    if len(row) >= 4:
+        spacer = row[2]  # spacer column
+        mock_data.append({
+            'sequence_name': f'test_guide_{i}',
+            'dna_sequence': spacer,
+            'on_target_score': 80 + (i % 20),  # 80-99 range
+            'off_target_score': 70 + (i % 15),  # 70-84 range
+            'on_plus_off': 150 + (i % 30)  # 150-179 range
+        })
+
+# Create DataFrame and save
+df = pd.DataFrame(mock_data)
+df = df.sort_values('on_plus_off', ascending=False).reset_index(drop=True)
+df['rank'] = range(1, len(df) + 1)
+df = df[['rank', 'sequence_name', 'dna_sequence', 'on_target_score', 'off_target_score', 'on_plus_off']]
+df.to_csv('test_mock_idt.csv', index=False)
+print(f'✅ Created mock IDT data: {len(df)} sequences')
+"
           
           # Test guide selection
           python utils/select_top_guides.py test_mock_idt.csv
@@ -206,42 +206,42 @@ jobs:
         if [ -f "CRISPR_candidates.txt" ]; then
           # Create mock IDT CSV for testing
           python -c "
-          import pandas as pd
-          import re
-          
-          # Read FASTA file and extract sequences
-          sequences = []
-          with open('CRISPR_candidates.txt', 'r') as f:
-              current_seq = ''
-              for line in f:
-                  if line.startswith('>'):
-                      if current_seq:
-                          sequences.append(current_seq)
-                      current_seq = ''
-                  else:
-                      current_seq += line.strip()
-              if current_seq:
-                  sequences.append(current_seq)
-          
-          # Create mock IDT results
-          mock_data = []
-          for i, seq in enumerate(sequences, 1):
-              mock_data.append({
-                  'sequence_name': f'guide_{i}',
-                  'dna_sequence': seq,
-                  'on_target_score': 80 + (i % 20),  # 80-99 range
-                  'off_target_score': 70 + (i % 15),  # 70-84 range
-                  'on_plus_off': 150 + (i % 30)  # 150-179 range
-              })
-          
-          # Create DataFrame and save
-          df = pd.DataFrame(mock_data)
-          df = df.sort_values('on_plus_off', ascending=False).reset_index(drop=True)
-          df['rank'] = range(1, len(df) + 1)
-          df = df[['rank', 'sequence_name', 'dna_sequence', 'on_target_score', 'off_target_score', 'on_plus_off']]
-          df.to_csv('CRISPR_candidates_mock_idt.csv', index=False)
-          print(f'✅ Created mock IDT data: {len(df)} sequences')
-          "
+import pandas as pd
+import re
+
+# Read FASTA file and extract sequences
+sequences = []
+with open('CRISPR_candidates.txt', 'r') as f:
+    current_seq = ''
+    for line in f:
+        if line.startswith('>'):
+            if current_seq:
+                sequences.append(current_seq)
+            current_seq = ''
+        else:
+            current_seq += line.strip()
+    if current_seq:
+        sequences.append(current_seq)
+
+# Create mock IDT results
+mock_data = []
+for i, seq in enumerate(sequences, 1):
+    mock_data.append({
+        'sequence_name': f'guide_{i}',
+        'dna_sequence': seq,
+        'on_target_score': 80 + (i % 20),  # 80-99 range
+        'off_target_score': 70 + (i % 15),  # 70-84 range
+        'on_plus_off': 150 + (i % 30)  # 150-179 range
+    })
+
+# Create DataFrame and save
+df = pd.DataFrame(mock_data)
+df = df.sort_values('on_plus_off', ascending=False).reset_index(drop=True)
+df['rank'] = range(1, len(df) + 1)
+df = df[['rank', 'sequence_name', 'dna_sequence', 'on_target_score', 'off_target_score', 'on_plus_off']]
+df.to_csv('CRISPR_candidates_mock_idt.csv', index=False)
+print(f'✅ Created mock IDT data: {len(df)} sequences')
+"
           
           # Test guide selection
           python utils/select_top_guides.py CRISPR_candidates_mock_idt.csv
