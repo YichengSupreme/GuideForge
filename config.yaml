@@ -5,7 +5,7 @@
 ucsc:
   upstream_distance: 100
   downstream_distance: 100
-  genome_assembly: "hg38"
+  genome_assembly: "mm10"
   retries: 3
   upstream_output: "Upstream_sequences.txt"
   downstream_output: "Downstream_sequences.txt"
@@ -36,6 +36,8 @@ outputs:
 
 # IDT Analysis Settings
 idt:
+  IDT_SPECIES_NAME: mouse # IDT expects short species names like "mouse" in lowercase instead of "Mus musculus"
+  IDT_GENOME_ASSEMBLY: mm10
   batch_size: 10
   timeout: 60
   delay_min: 3

@@ -159,6 +159,33 @@ def read_fasta_txt(path, logger):
         logger.error(f"Error reading file {path}: {str(e)}")
         raise
 
+# === 3a. Species / genome mapping ===
+species_map = {
+    "hg38": ("human", "hg38"),
+    "hg19": ("human", "hg19"),
+    "mm10": ("mouse", "mm10"),
+    "mm39": ("mouse", "mm39"),
+    "rn7": ("rat", "rn7"),
+    "danRer11": ("zebrafish", "danRer11"),
+    "ce11": ("c_elegans", "ce11"),
+}
+
+# Check genome assembly support first
+ucsc_assembly = CONFIG.get("UCSC_GENOME_ASSEMBLY")
+if not ucsc_assembly:
+    print("❌ Error: UCSC_GENOME_ASSEMBLY not found in config.yaml")
+    print("Please add 'genome_assembly' to the 'ucsc' section of your config.yaml")
+    sys.exit(1)
+
+if ucsc_assembly not in species_map:
+    print(f"❌ Error: Unsupported genome assembly '{ucsc_assembly}'")
+    print(f"Supported assemblies: {', '.join(species_map.keys())}")
+    print(f"Please update your config.yaml with a supported assembly or add '{ucsc_assembly}' to the species_map")
+    sys.exit(1)
+
+idt_species, idt_assembly = species_map[ucsc_assembly]
+print(f"✅ Genome mapping: UCSC {ucsc_assembly} → IDT {idt_species} ({idt_assembly})")
+
 # === 3. Payload builder ===
 def build_payload(named_seq_list, logger):
     """Build API payload for IDT CRISPR analysis."""
@@ -180,6 +207,7 @@ def build_payload(named_seq_list, logger):
         return None
     
     logger.debug(f"Using {len(valid_sequences)} valid sequences out of {len(named_seq_list)}")
+    logger.debug(f"Using IDT species: {idt_species}, genome: {idt_assembly}")
     
     return {
         "ToolName": "CRISPR_SEQUENCE",
@@ -187,7 +215,8 @@ def build_payload(named_seq_list, logger):
         "DesignsPerGene": "6",
         "From": 1,
         "To": 1,
-        "Species": "human",
+        "Species": idt_species,
+        "Genome": idt_assembly,  # some IDT endpoints also accept Genome
         "NamedSequences": [{"Name": n, "Sequence": s} for n, s in valid_sequences]
     }
 
@@ -298,6 +327,15 @@ def tiny_test(logger):
     logger.info("Running connectivity test with one sequence...")
     print("🔎 Running connectivity test with one sequence...")
     
+    # Check if session cookie is configured
+    cookie = CONFIG.get("IDT_SESSION_COOKIE", "").strip()
+    if not cookie or cookie == "YOUR_IDT_SESSION_COOKIE_HERE":
+        logger.error("IDT session cookie not configured")
+        print("❌ Error: IDT session cookie not configured")
+        print("Please update the 'session_cookie' in the 'idt' section of config.yaml")
+        print("Get your session cookie from IDT's website after logging in")
+        return False
+    
     test_seq = "AACGCGCCGCGCGCCCTTGT"
     payload = build_payload([("TinyTest", test_seq)], logger)
     
@@ -311,9 +349,20 @@ def tiny_test(logger):
         logger.info(f"Test request HTTP status: {r.status_code}")
         print("HTTP status:", r.status_code)
         
-        if r.status_code != 200:
+        if r.status_code == 401:
+            logger.error("Authentication failed - invalid session cookie")
+            print("❌ Authentication failed - invalid session cookie")
+            print("Please check your session cookie in config.yaml")
+            return False
+        elif r.status_code == 500:
+            logger.error(f"IDT server error: {r.text[:200]}")
+            print("❌ IDT server error - this might be a temporary issue")
+            print("Try again later or check IDT's service status")
+            return False
+        elif r.status_code != 200:
             logger.error(f"Connection failed with status {r.status_code}: {r.text[:200]}")
-            print("❌ Connection failed.")
+            print(f"❌ Connection failed with status {r.status_code}")
+            print("Check your internet connection and IDT service status")
             return False
             
         data = r.json()
@@ -543,7 +592,7 @@ def main():
     
     # Encourage manifest creation
     print("\n📋 Run completed! Consider creating a manifest for reproducibility:")
-    print(f"   python manifest.py --config config.yaml --policy policy.yaml --stats '{{\"files_processed\": {len(input_files)}, \"successful_files\": {successful_files}, \"success_rate\": {successful_files/len(input_files):.3f}}}'")
+    print(f"   python manifest.py --config config.yaml --policy policy.yaml --stats '{{\"files_processed\": {len(input_files)}, \"successful_files\": {successful_files}, \"success_rate\": {successful_files/len(input_files):.3f}, \"idt_species\": \"{idt_species}\", \"idt_genome_assembly\": \"{idt_assembly}\", \"species_mapping\": \"{ucsc_assembly} → {idt_species} ({idt_assembly})\"}}'")
 
 if __name__ == "__main__":
     main()
