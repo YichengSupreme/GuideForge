@@ -433,6 +433,7 @@ Examples:
     # Auto-generate manifest
     print(f"\n📋 Generating manifest for reproducibility...")
     try:
+        sys.path.insert(0, str(Path(__file__).parent))
         from manifest import write_manifest
         import glob
         import pandas as pd
@@ -478,7 +479,7 @@ Examples:
         total_runtime_sec = round(time.time() - start_time, 2)
         
         # Get species mapping information for manifest
-        from utils.idt_batch_crispr import species_map
+        from idt_batch_crispr import species_map
         ucsc_assembly = CONFIG.get("UCSC_GENOME_ASSEMBLY")
         idt_species, idt_assembly = species_map.get(ucsc_assembly, ("unknown", "unknown"))
         
@@ -511,6 +512,7 @@ Examples:
         policy_path = Path(__file__).parent.parent / "policy.yaml"
         
         # Import and call manifest generation
+        sys.path.insert(0, str(Path(__file__).parent))
         from manifest import write_manifest
         write_manifest(config_path=str(config_path), policy_path=str(policy_path), 
                       summary_stats=summary_stats, output=manifest_file)
