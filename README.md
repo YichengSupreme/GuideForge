@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/YichengSupreme/GuideForge/actions/workflows/ci.yaml/badge.svg)](https://github.com/YichengSupreme/GuideForge/actions/workflows/ci.yaml)
 
-A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT (Integrated DNA Technologies) CRISPR tools. The pipeline supports group-specific gRNA design specifications through policy.yaml and produces a manifest log per run for reproducibility tracking. The pipeline includes a configurable PAM scanner supporting multiple PAM patterns and comprehensive quality control filtering.
+A modular pipeline for CRISPR gRNA choosing using UCSC Genome Browser and IDT (Integrated DNA Technologies) CRISPR tools. The pipeline supports group-specific gRNA design specifications through policy.yaml and produces a manifest log per run for reproducibility tracking. The pipeline includes a configurable PAM scanner supporting multiple PAM patterns and comprehensive quality control filtering. Supports human (hg19/38), mouse, zebrafish, C.elegans, and rat genomes.
 
 ---
 
@@ -225,6 +225,9 @@ system:
   python_cmd: "python3"
   verbose: 1
 ```
+
+Supports human (hg19/38), mouse, zebrafish, C.elegans, and rats. Set in config.yaml under UCSC and IDT gene assembly and species name.
+
 
 **Important**: You must update the `session_cookie` in `config.yaml` with your valid IDT session cookie.
 
